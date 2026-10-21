@@ -1,0 +1,168 @@
+# Cómo funciona el escáner y todos sus comandos
+
+Para instalarlo, ver [INSTALACION.md](INSTALACION.md).
+
+## 1. Idea general
+
+```
+scanner.yaml (carpetas = "fuentes")
+        │
+   scan start ──► inventario (recorre la carpeta, solo lectura, sin seguir symlinks)
+        │
+        ├─ archivo < 1 MB ──► cola light (TXT, CSV) ───┐
+        │                 └─► cola heavy (PDF, XLSX) ──┴─► workers ──► RUT / email
+        │                                                    (cifrado en PostgreSQL)
+        └─ archivo ≥ 1 MB ──► tabla de PENDIENTES ──► scan process-pending (cuando decidas)
+        │
+   scan report / scan pending ──► resultados
+        │
+   API (token o mTLS + token) ──► aplicación del cliente consulta "¿dónde aparece este RUT?"
+```
+
+- **Solo lectura:** el escáner nunca modifica, mueve ni borra tus archivos.
+- **Un archivo por worker:** la base de datos impide que dos workers tomen el mismo archivo. Cada worker extrae el
+  texto en un proceso aislado, con límite de memoria y sin red.
+- **Datos protegidos:** el RUT o email encontrado se guarda como hash (HMAC, para buscarlo) y cifrado (AES), junto
+  con su ubicación (archivo, página, hoja, fila). Nunca aparece en los logs.
+- **Archivos problemáticos:** un PDF corrupto, con contraseña o ilegible queda registrado con su motivo (`corrupt`,
+  `encrypted`…) y el escaneo continúa.
+- **Estado final del escaneo:**
+  - `completed`: se procesó todo;
+  - `partial`: quedaron archivos pendientes o con error;
+  - `failed`: el escaneo falló;
+  - `unavailable`: la carpeta dejó de estar accesible.
+
+## 2. Configuración (`/etc/arsop/scanner.yaml`)
+
+Los campos más usados:
+
+```yaml
+sources:                         # carpetas a escanear
+  - id: rrhh
+    root_path: /data/input/rrhh  # ruta absoluta y en solo lectura
+scanner:
+  max_extract_workers: 4         # workers de la cola light (TXT, CSV)
+  max_heavy_workers: 2           # workers de la cola heavy (PDF, XLSX)
+  large_files: defer             # defer = archivos ≥ 1 MB a pendientes | last = procesarlos al final
+api:
+  bind: 127.0.0.1
+  port: 8080
+```
+
+La plantilla completa, con todos los campos comentados, está en
+[config/scanner.example.yaml](config/scanner.example.yaml). Después de cambiar algo, ejecuta siempre
+`config validate`.
+
+## 3. Comandos
+
+Todos los comandos aceptan `--file RUTA`; por defecto usan `/etc/arsop/scanner.yaml`. En la VM se ejecutan con el
+usuario de servicio:
+
+```bash
+sudo -u arsop arsop-scanner <comando> --file /etc/arsop/scanner.yaml
+```
+
+### Configuración y preparación
+| Comando | Qué hace |
+|---|---|
+| `arsop-scanner version` | Muestra la versión. |
+| `arsop-scanner help` | Muestra la ayuda. |
+| `arsop-scanner config validate` | Revisa la configuración y rechaza valores inseguros. |
+| `arsop-scanner sources list` | Lista las carpetas configuradas. |
+| `arsop-scanner sources check` | Verifica que cada carpeta exista y sea de solo lectura. |
+| `arsop-scanner init` | Crea o actualiza las tablas y registra las fuentes. Se puede repetir sin problema. |
+| `arsop-scanner token new` | Genera un token de API y su hash SHA-256. El hash va en `api_principals.yaml`. |
+
+### Escaneo
+| Comando | Qué hace |
+|---|---|
+| `scan start --source ID` | Escanea la fuente. Si no se indica otra cosa, es incremental: solo procesa los archivos nuevos o modificados. |
+| `scan start --source ID --full` | Vuelve a procesar todos los archivos. |
+| `scan status --scan ID [--json]` | Muestra el estado y el avance. |
+| `scan report --scan ID` | Entrega un reporte JSON con archivos vistos, hallazgos, errores y pendientes. |
+| `scan pause --scan ID` | Pausa el escaneo. |
+| `scan resume --scan ID` | Retoma un escaneo pausado o cortado, por ejemplo después de reiniciar la máquina. |
+
+### Archivos grandes (≥ 1 MB)
+| Comando | Qué hace |
+|---|---|
+| `scan pending --scan ID [--json]` | Muestra la tabla de archivos pendientes, ordenada por tamaño. |
+| `scan process-pending --scan ID` | Procesa todos los pendientes. |
+| `scan process-pending --scan ID --max-bytes N` | Procesa solo los pendientes de hasta N bytes. |
+
+Ejemplo de `scan pending`:
+```
+TAMAÑO      COLA    ARCHIVO
+1.2 MB      light   nomina_grande.txt
+1.9 MB      heavy   informe_grande.pdf
+2 archivos pendientes (3.1 MB)
+```
+
+### Servicio de la API (VM)
+```bash
+sudo systemctl status  arsop-api
+sudo systemctl restart arsop-api        # después de cambiar scanner.yaml o api_principals.yaml
+sudo journalctl -u arsop-api -f         # logs (no contienen RUTs ni emails)
+```
+
+## 4. Flujo típico de un escaneo
+
+```bash
+F="--file /etc/arsop/scanner.yaml"
+sudo -u arsop arsop-scanner config validate $F
+sudo -u arsop arsop-scanner sources check $F
+sudo -u arsop arsop-scanner scan start --source rrhh $F    # anota el ID que imprime
+sudo -u arsop arsop-scanner scan report  --scan <ID> $F
+sudo -u arsop arsop-scanner scan pending --scan <ID> $F
+sudo -u arsop arsop-scanner scan process-pending --scan <ID> --max-bytes 10000000 $F   # primero los de hasta 10 MB
+sudo -u arsop arsop-scanner scan process-pending --scan <ID> $F                        # luego el resto
+sudo -u arsop arsop-scanner scan report  --scan <ID> $F
+```
+
+## 5. Si algo se corta
+- **Se reinició la máquina o se cortó el proceso:** ejecuta `scan resume --scan <ID>`. El escaneo sigue desde donde
+  quedó, sin repetir los archivos ya procesados.
+- **Se cayó el montaje de la carpeta:** el escaneo queda como `unavailable` con error `root_unavailable`. Vuelve a
+  montar la carpeta y ejecuta `scan resume`.
+- **Hay un PDF corrupto o con contraseña:** aparece en `scan report` con su motivo. No detiene el escaneo.
+
+## 6. Tipos de archivo soportados (Fase 1)
+- TXT, CSV y XLSX.
+- PDF con texto digital.
+
+Los PDFs escaneados (imágenes) necesitan OCR, que llega en la Fase 2. Por ahora se reportan como pendientes de OCR.
+
+## 7. API
+
+La API solo **consulta** lo que ya se encontró; no escanea.
+
+Endpoints:
+
+| Endpoint | Permiso (scope) | Uso |
+|---|---|---|
+| `POST /api/v1/identifiers/search` | `findings:search` | ¿En qué archivos aparece este RUT o email? |
+| `GET /api/v1/files/{id}` | `files:read` | Metadatos de un archivo. La ruta solo aparece con `files:names`. |
+| `GET /api/v1/scans/{id}` | `scans:read` | Estado y avance de un escaneo. |
+| `GET /api/v1/scans/{id}/pending` | `scans:read` | Archivos grandes pendientes. |
+| `GET /api/v1/scans/{id}/errors` | `scans:diagnose` | Errores del escaneo, sin datos personales. |
+
+Ejemplo, en la VM o a través del túnel SSH:
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/v1/identifiers/search \
+  -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"type":"rut","value":"12.345.678-5","case_reference":"CASO-2026-001"}'
+
+curl -s http://127.0.0.1:8080/api/v1/scans/<ID>/pending -H "Authorization: Bearer <TOKEN>"
+```
+
+- `case_reference` es obligatorio. Toda consulta queda registrada en la tabla de auditoría.
+- La búsqueda tiene un límite de consultas por minuto, para impedir que alguien pruebe RUTs uno por uno.
+- Para dar acceso a la aplicación de un cliente, con certificado mTLS, token ligado al certificado, vencimiento e IPs
+  permitidas, sigue [docs/API-CLIENTE.md](docs/API-CLIENTE.md). El contrato completo de la API está en
+  [api/openapi.yaml](api/openapi.yaml).
+
+## 8. Para desarrolladores
+```bash
+make build      # bin/scanner y bin/api
+make test       # vet + tests (PostgreSQL embebido; necesita Python con workers/extractor/requirements.txt)
+```

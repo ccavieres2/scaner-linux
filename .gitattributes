@@ -1,0 +1,5 @@
+# Forzar LF: los scripts y configs se ejecutan en Linux aunque se editen en Windows.
+* text=auto eol=lf
+*.sh text eol=lf
+*.pdf binary
+*.xlsx binary

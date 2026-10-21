@@ -1,0 +1,5 @@
+DATOS 100% FICTICIOS PARA PRUEBAS. No corresponden a personas reales.
+Contacto: Persona Ficticia Seis, RUT 22.222.222-2, correo seis.ficticia@example.net
+Referencia sin RUT: telefono 1234 5678 (no es identificador soportado aun).
+Numero que parece RUT pero no lo es: 9.999.999-9 (DV incorrecto, negativo).
+Confusion OCR simulada: 2O.OOO.OO5-6 (hipotesis incierta, DOC-002).

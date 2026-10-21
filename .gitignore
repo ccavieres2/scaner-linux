@@ -1,0 +1,10 @@
+bin/
+*.env
+.env
+!.env.example
+secrets/
+*.key
+*.pem
+coverage.out
+deploy/secrets/
+deploy/config/

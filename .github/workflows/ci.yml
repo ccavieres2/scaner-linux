@@ -1,0 +1,20 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r workers/extractor/requirements.txt
+      - run: make fmt-check
+      - run: make test            # incluye E2E con PostgreSQL embebido y pruebas Linux-only (openat2, symlinks, CLI)
+      - run: make validate-example
+      - run: make vuln

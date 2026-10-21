@@ -1,0 +1,6 @@
+nombre,rut,correo,nota
+Persona Ficticia Uno,12.345.678-5,uno.ficticio@example.cl,valido con puntos
+Persona Ficticia Dos,11111111-1,dos+tag@example.com,valido sin puntos
+Persona Ficticia Tres,10.000.013-K,tres@ejemplo.test,DV K
+Persona Ficticia Cuatro,12.345.678-9,cuatro@example.org,DV INVALIDO (negativo)
+Persona Ficticia Cinco,10000004-0,cinco@xn--ejmplo-cva.test,DV 0 y dominio IDN

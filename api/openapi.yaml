@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: ARSOP Scanner API
+  version: "1"
+  description: >
+    API de consulta de ubicaciones de identificadores personales (RUT, email).
+    Los resultados son coincidencias potenciales: no acreditan identidad del titular.
+    La ausencia de resultados no implica ausencia de datos si la cobertura es parcial.
+    Todas las respuestas llevan Cache-Control: no-store.
+servers:
+  - url: https://localhost:8443/api/v1
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: >
+        Token Bearer. En modo mtls_token (obligatorio fuera de loopback) además se exige un certificado
+        de cliente TLS emitido por la CA del operador, y el token solo es válido con ese certificado
+        (ver docs/API-CLIENTE.md).
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden, not_found, invalid_body, case_reference_required, unsupported_type,
+                 invalid_identifier, invalid_cursor, rate_limited, internal_error, method_not_allowed]
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      required: [type, value, case_reference]
+      properties:
+        type: {type: string, enum: [rut, email]}
+        value: {type: string, maxLength: 254, description: "RUT con DV válido o email. Nunca se devuelve ni se registra."}
+        case_reference: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", description: "Caso ARSOP opaco (auditoría)."}
+        page_size: {type: integer, minimum: 1, maximum: 500, default: 25}
+        cursor: {type: string, description: "Opaco, firmado, ligado a la consulta, expira en 15 min."}
+    Location:
+      type: object
+      properties:
+        page: {type: integer}
+        sheet: {type: string, description: "'[redacted]' sin scope files:names"}
+        row: {type: integer}
+        column: {type: string}
+        line: {type: integer}
+    Result:
+      type: object
+      required: [file_id, locations, occurrences, method, confidence, review_status, version_state]
+      properties:
+        file_id: {type: string, format: uuid}
+        display_name: {type: string, description: "Solo con scope files:names"}
+        locations: {type: array, maxItems: 20, items: {$ref: "#/components/schemas/Location"}}
+        occurrences: {type: integer}
+        method: {type: string, enum: [digital, ocr, hybrid]}
+        confidence: {type: number, description: "Heurística no calibrada; no es probabilidad de verdad."}
+        review_status: {type: string, enum: [potential_match, requires_review, confirmed_by_authorized_reviewer]}
+        version_state: {type: string, enum: [completed, partial]}
+        processed_at: {type: string, format: date-time}
+    Coverage:
+      type: object
+      properties:
+        scan_status: {type: string, enum: [completed, partial, in_progress, never_scanned]}
+        last_completed_at: {type: string, format: date-time, nullable: true}
+        files_not_covered: {type: integer}
+        sources_total: {type: integer}
+        sources_scanned: {type: integer}
+    SearchResponse:
+      type: object
+      properties:
+        request_id: {type: string}
+        schema_version: {type: string}
+        as_of: {type: string, format: date-time}
+        type: {type: string}
+        result_count: {type: integer, description: "Número de ARCHIVOS (no de ocurrencias)."}
+        coverage: {$ref: "#/components/schemas/Coverage"}
+        results: {type: array, items: {$ref: "#/components/schemas/Result"}}
+        next_cursor: {type: string, nullable: true}
+        notice: {type: string}
+  responses:
+    Unauthorized: {description: Sin credenciales válidas, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    Forbidden: {description: Falta scope, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    NotFound: {description: No existe o no pertenece al tenant (respuesta idéntica), content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+paths:
+  /identifiers/search:
+    post:
+      summary: Buscar archivos que contienen un identificador (scope findings:search)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/SearchRequest"}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/SearchResponse"}}}}
+        "400": {description: Solicitud inválida, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {description: Límite de frecuencia por principal, headers: {Retry-After: {schema: {type: integer}}}}
+  /files/{id}:
+    get:
+      summary: Metadatos de un archivo (scope files:read; ruta solo con files:names)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "200": {description: OK}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /scans/{id}:
+    get:
+      summary: Estado y avance de un escaneo (scope scans:read)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "200": {description: OK}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /scans/{id}/errors:
+    get:
+      summary: Errores sanitizados y paginados (scope scans:diagnose)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        "200": {description: OK}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /scans/{id}/pending:
+    get:
+      summary: >
+        Archivos grandes diferidos, no procesados todavía (scope scans:read; ruta solo con files:names).
+        Ordenados por tamaño ascendente.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        "200": {description: "{pending: [{file_id, size_bytes, queue, deferred_at, display_name?, relative_path?}], next_cursor}"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /health/live:
+    get: {summary: Vitalidad, security: [], responses: {"200": {description: OK}}}
+  /health/ready:
+    get: {summary: Base de datos y migraciones, security: [], responses: {"200": {description: Listo}, "503": {description: No listo}}}

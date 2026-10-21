@@ -1,0 +1,57 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 141 >>
+stream
+BT /F1 11 Tf 50 780 Td (CONTRATO FICTICIO DE PRUEBA - datos inventados) Tj ET
+BT /F1 11 Tf 50 764 Td (Comparece Persona Ficticia Siete) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 31 >>
+stream
+BT /F1 11 Tf 50 780 Td () Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 166 >>
+stream
+BT /F1 11 Tf 50 780 Td (Pagina 3) Tj ET
+BT /F1 11 Tf 50 764 Td (RUT del firmante: 5.126.663-3) Tj ET
+BT /F1 11 Tf 50 748 Td (Correo: siete.ficticia@example.org) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000000445 00000 n 
+0000000571 00000 n 
+0000000652 00000 n 
+0000000778 00000 n 
+0000000995 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1092
+%%EOF

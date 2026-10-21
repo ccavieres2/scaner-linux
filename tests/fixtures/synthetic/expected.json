@@ -1,0 +1,23 @@
+{
+  "_comment": "Oráculo E2E sobre tests/fixtures/synthetic/tree. Todos los datos son ficticios. Clave: tipo|valor normalizado -> archivos con ubicación.",
+  "indexed": {
+    "rut|12345678-5": ["clientes.csv@row=2,col=B", "planilla.xlsx@sheet=Clientes,row=3,col=B"],
+    "rut|11111111-1": ["clientes.csv@row=3,col=B"],
+    "rut|10000013-K": ["clientes.csv@row=4,col=B", "planilla.xlsx@sheet=Oculta,row=3,col=B"],
+    "rut|10000004-0": ["clientes.csv@row=6,col=B"],
+    "rut|22222222-2": ["sub/notas.txt@line=2"],
+    "rut|5126663-3": ["contrato.pdf@page=3"],
+    "rut|20000005-6": ["planilla.xlsx@sheet=Clientes,row=2,col=B"],
+    "email|uno.ficticio@example.cl": ["clientes.csv@row=2,col=C", "planilla.xlsx@sheet=Clientes,row=3,col=C"],
+    "email|dos+tag@example.com": ["clientes.csv@row=3,col=C"],
+    "email|tres@ejemplo.test": ["clientes.csv@row=4,col=C"],
+    "email|cuatro@example.org": ["clientes.csv@row=5,col=C"],
+    "email|cinco@xn--ejmplo-cva.test": ["clientes.csv@row=6,col=C"],
+    "email|seis.ficticia@example.net": ["sub/notas.txt@line=2"],
+    "email|siete.ficticia@example.org": ["contrato.pdf@page=3"],
+    "email|ocho@example.cl": ["planilla.xlsx@sheet=Clientes,row=2,col=C"]
+  },
+  "not_indexed_invalid_checksum": ["rut|12345678-9", "rut|9999999-9"],
+  "not_detected_in_digital_text": ["rut|20000005-6 (variante '2O.OOO.OO5-6' en notas.txt; hipótesis OCR solo aplica a texto OCR)"],
+  "partial_files": ["contrato.pdf (página 2 requiere OCR, Fase 2)"]
+}

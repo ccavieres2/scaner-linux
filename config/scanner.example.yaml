@@ -1,0 +1,79 @@
+# Configuración ILUSTRATIVA del escáner ARSOP (schema_version 1).
+# No contiene secretos: solo rutas a archivos de secretos con ACL estrictas.
+# Validar con: scanner config validate --file /etc/arsop/scanner.yaml
+schema_version: 1
+
+tenant:
+  name: "Cliente Ejemplo"
+
+# Raíces autorizadas. El cliente monta los file servers en el host y los
+# expone en solo lectura en los workers. Las raíces no pueden anidarse.
+sources:
+  - id: rrhh
+    root_path: /data/input/rrhh
+    enabled: true
+  - id: finanzas
+    root_path: /data/input/finanzas
+    enabled: true
+
+scanner:
+  scan_mode: incremental          # incremental | full
+  follow_symlinks: false          # true no soportado en v1
+  max_file_bytes: 524288000       # 500 MiB
+  max_pdf_pages: 2000
+  max_extract_workers: 4          # cola liviana: TXT/CSV (Go, lectura por partes)
+  max_heavy_workers: 2            # cola pesada: PDF/XLSX (procesos Python aislados)
+  worker_memory_mb: 1024          # tope duro por proceso Python (RLIMIT_AS)
+  memory_budget_mb: 3072          # total comprometido: pesados*worker_memory + livianos*64 <= presupuesto
+  large_file_bytes: 1048576       # umbral de "archivo grande" (1 MiB)
+  large_files: defer              # defer: se saltan y quedan en `scan pending` hasta `scan process-pending`
+                                  # last:  se procesan en el mismo escaneo, después de los pequeños
+  temp_dir: /var/tmp/arsop        # temporales del worker en disco cifrado; se borran solos
+  max_ocr_workers: 2
+  max_inflight_files: 64
+  max_ocr_seconds_per_page: 60
+  ocr_languages: [spa, eng]
+  retry_max: 3
+  resume_on_restart: true
+  network_access: false           # true rechazado
+  file_mounts_read_only: true     # false rechazado
+  chunk_overlap_chars: 256        # superposición entre fragmentos (DOC-006); mínimo 256
+  max_extract_seconds_per_file: 300
+  extractor_command: [python3, -I, -B, /opt/arsop/workers/extractor/extract.py]
+
+api:
+  bind: 127.0.0.1                 # loopback o IP privada; nunca 0.0.0.0
+  port: 8080
+  require_auth: true              # false rechazado
+  max_body_bytes: 65536
+  max_page_size: 100
+  search_rate_per_minute: 30      # por principal; anti-enumeración (SEC-007)
+  search_burst: 5
+  auth:
+    # static_token_dev: solo token; únicamente con bind en loopback (pruebas).
+    # mtls_token: certificado de cliente + token ligado a ese certificado.
+    #             Obligatorio si bind no es loopback (ver docs/API-CLIENTE.md).
+    mode: static_token_dev
+    principals_file: /run/secrets/api_principals.yaml
+  # allowed_cidrs: [10.20.0.15/32]  # solo la IP del servidor de la aplicación del cliente
+  # tls:                          # obligatorio si bind no es loopback
+  #   cert_file: /etc/arsop/tls/api.crt
+  #   key_file: /etc/arsop/tls/api.key
+  #   client_ca_file: /etc/arsop/tls/client-ca.crt   # modo mtls_token
+
+database:
+  host: postgres
+  port: 5432
+  name: arsop
+  user: arsop_scanner
+  password_file: /run/secrets/db_password
+  sslmode: disable                # solo permitido en red Docker interna (ADR-0004)
+
+secrets:
+  hmac_key_file: /run/secrets/hmac_key
+  encryption_key_file: /run/secrets/encryption_key
+
+security:
+  store_raw_text: false
+  store_snippets: false
+  audit_enabled: true
