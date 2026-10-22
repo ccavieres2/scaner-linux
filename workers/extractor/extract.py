@@ -44,7 +44,8 @@ MAX_XLSX_RATIO = 200
 MAX_ZIP_ENTRIES = 10000
 MAX_IMAGE_PIXELS = 100_000_000   # anti "bomba de píxeles": más grande = image_too_large
 MAX_OCR_PIXELS = 40_000_000      # se reduce antes de OCR (memoria acotada)
-MIN_OCR_SIDE = 1500              # imágenes chicas se amplían x2 (mejor precisión)
+MIN_OCR_SIDE = 2000              # imágenes más chicas se amplían (fotos de carnet, capturas)
+TARGET_OCR_SIDE = 2200           # lado mayor tras ampliar (máx. x4)
 IMAGE_COVERAGE_FOR_OCR = 0.2     # página con texto pero >= 20 % imagen (anexo escaneado): también OCR
 
 
@@ -83,8 +84,9 @@ class OCR:
     def available(self) -> bool:
         return self.bin is not None
 
-    def run(self, img):
-        """Devuelve el texto reconocido, o None si tesseract falló o excedió el tiempo."""
+    @staticmethod
+    def prepare(img, upscale: bool):
+        """Escala de grises, tamaño acotado y, si es chica, ampliada (letra ~30 px)."""
         from PIL import Image
 
         img = img.convert("L")
@@ -92,13 +94,26 @@ class OCR:
         if w * h > MAX_OCR_PIXELS:
             f = math.sqrt(MAX_OCR_PIXELS / (w * h))
             img = img.resize((max(1, int(w * f)), max(1, int(h * f))), Image.LANCZOS)
-        elif max(w, h) < MIN_OCR_SIDE:
-            img = img.resize((w * 2, h * 2), Image.LANCZOS)
+        elif upscale and max(w, h) < MIN_OCR_SIDE:
+            # Factor entero (x2..x4): los no enteros deforman trazos finos como el guion.
+            f = min(4, max(2, round(TARGET_OCR_SIDE / max(w, h))))
+            img = img.resize((int(w * f), int(h * f)), Image.LANCZOS)
+        return img
+
+    @staticmethod
+    def enhance(img):
+        """Contraste y nitidez: ayuda con fotos de documentos (fondos con tramas, desenfoque)."""
+        from PIL import ImageFilter, ImageOps
+
+        return ImageOps.autocontrast(img, cutoff=1).filter(ImageFilter.UnsharpMask(2, 150, 3))
+
+    def run(self, img, psm: int = 3):
+        """Devuelve el texto reconocido, o None si tesseract falló o excedió el tiempo."""
         buf = io.BytesIO()
         img.save(buf, "PNG")
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "OMP_THREAD_LIMIT": "1"}
         try:
-            p = subprocess.run([self.bin, "stdin", "stdout", "-l", self.langs, "--psm", "3"],
+            p = subprocess.run([self.bin, "stdin", "stdout", "-l", self.langs, "--psm", str(psm)],
                                input=buf.getvalue(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                timeout=self.timeout, env=env)
         except (subprocess.TimeoutExpired, OSError):
@@ -108,12 +123,26 @@ class OCR:
         return p.stdout.decode("utf-8", "replace")
 
 
-def ocr_unit(ocr: OCR, img, page: int) -> None:
-    text = ocr.run(img)
-    if text is None:
+def ocr_unit(ocr: OCR, img, page: int, photo: bool = False) -> None:
+    """OCR de una página o imagen.
+
+    Las imágenes sueltas (fotos de carnet, capturas) usan 3 pasadas con distinto
+    preprocesamiento y segmentación: cada una falla en caracteres distintos (p. ej.
+    el guion del DV) y el detector combina los hallazgos sin duplicarlos. Las
+    páginas de PDF usan 1 pasada (son muchas y suelen ser escaneos limpios).
+    """
+    base = ocr.prepare(img, upscale=photo)
+    variants = [(ocr.enhance(base), 3), (base, 3), (base, 11)] if photo else [(base, 3)]
+    ok = False
+    for v, psm in variants:
+        text = ocr.run(v, psm)
+        if text is None:
+            continue
+        ok = True
+        if text.strip():
+            out({"t": "unit", "unit": "page", "page": page, "text": text, "method": "ocr"})
+    if not ok:
         out({"t": "warn", "code": "ocr_failed", "page": page})
-    elif text.strip():
-        out({"t": "unit", "unit": "page", "page": page, "text": text, "method": "ocr"})
 
 
 def spool_stdin(tmp) -> int:
@@ -259,7 +288,7 @@ def extract_image(fh, max_pages: int, ocr: OCR) -> int:
             except Exception:
                 out({"t": "warn", "code": "page_unreadable", "page": i + 1})
                 continue
-            ocr_unit(ocr, frame, i + 1)
+            ocr_unit(ocr, frame, i + 1, photo=True)
             units += 1
     return units
 

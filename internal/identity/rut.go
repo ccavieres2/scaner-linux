@@ -88,11 +88,26 @@ func lastSignificant(s string) int {
 // ocrConfusions son sustituciones admitidas solo como hipótesis (spec §23.4).
 var ocrConfusions = map[byte]byte{'O': '0', 'o': '0', 'I': '1', 'l': '1', 'S': '5', 's': '5', 'B': '8'}
 
+// ocrDashes son lecturas OCR erróneas del guion del DV (cada una cuenta como edición).
+var ocrDashes = []string{"–", "—", "+", "~"}
+
 // OCRHypothesis intenta reinterpretar un candidato con confusiones típicas de
 // OCR. Devuelve la forma canónica, el número de sustituciones (costo de
 // edición) y ok solo si el resultado tiene DV válido y costo <= maxEdits.
 // El resultado SIEMPRE debe tratarse como hallazgo incierto.
 func OCRHypothesis(s string, maxEdits int) (canonical string, edits int, ok bool) {
+	// El guion antes del DV es lo que más falla en fotos (se lee '+', '~' o raya).
+	for _, d := range ocrDashes {
+		if n := strings.Count(s, d); n > 0 {
+			s = strings.ReplaceAll(s, d, "-")
+			edits += n
+		}
+	}
+	// Guion perdido ("80.000.0041"): con puntos de miles, el DV es el último carácter.
+	if strings.Count(s, ".") == 2 && !strings.Contains(s, "-") {
+		s = strings.TrimSpace(s[:len(s)-1]) + "-" + s[len(s)-1:]
+		edits++
+	}
 	b := []byte(s)
 	for i := range b {
 		if r, found := ocrConfusions[b[i]]; found {

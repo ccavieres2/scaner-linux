@@ -198,6 +198,8 @@ func TestPythonOCR(t *testing.T) {
 	}{
 		{"image", "escaneado.png", map[string]int{"rut|7654321-6": 1, "email|nueve.ficticia@example.cl": 1}},
 		{"image", "foto.jpg", map[string]int{"rut|7654321-6": 1}},
+		// Foto chica tipo cédula, fondo con trama: requiere ampliar y varias pasadas.
+		{"image", "carnet_ficticio.png", map[string]int{"rut|11222333-9": 1}},
 		{"pdf", "escaneado.pdf", map[string]int{"rut|15555555-6": 2, "email|diez.ficticio@example.org": 2}},
 		// Página con texto digital + escaneo pegado: el RUT solo está en la imagen.
 		{"pdf", "mixto.pdf", map[string]int{"rut|9876543-3": 1}},

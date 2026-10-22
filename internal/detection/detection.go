@@ -58,8 +58,10 @@ func DefaultOptions() Options { return Options{MaxOCREdits: 3} }
 
 var (
 	rutStrict = regexp.MustCompile(`\d{1,2}\.\d{3}\.\d{3}\s?-\s?[\dkK]|\d{7,8}\s?-\s?[\dkK]`)
-	rutOCR    = regexp.MustCompile(`[\dOoIlSsB]{1,2}\.[\dOoIlSsB]{3}\.[\dOoIlSsB]{3}\s?-\s?[\dkK]`)
-	emailRe   = regexp.MustCompile(`[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~.-]+@[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)+`)
+	// En OCR el guion del DV puede leerse como otro signo o perderse: con puntos de
+	// miles el formato sigue siendo inequívoco (siempre hipótesis con revisión).
+	rutOCR  = regexp.MustCompile(`[\dOoIlSsB]{1,2}\.[\dOoIlSsB]{3}\.[\dOoIlSsB]{3}(?:\s?[-–—+~]\s?)?[\dkK]`)
+	emailRe = regexp.MustCompile(`[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~.-]+@[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?)+`)
 )
 
 // Engine aplica todos los detectores.

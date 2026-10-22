@@ -62,6 +62,24 @@ func TestOCRConfusionIsUncertain(t *testing.T) {
 	if fs := NewEngine(Options{MaxOCREdits: 2}).Detect("RUT 2O.OOO.OO5-6", Location{}, "ocr"); len(fs) != 0 {
 		t.Fatalf("debe respetar umbral: %+v", fs)
 	}
+	// Guion del DV mal leído (foto de carnet): hipótesis incierta solo en OCR.
+	fs = e.Detect("RUN 80.000.004+1 y B0.000.004~1", Location{}, "ocr")
+	if len(fs) != 2 || fs[0].Normalized != "80000004-1" || fs[1].Normalized != "80000004-1" ||
+		fs[0].Status != StatusRequiresReview || fs[0].Confidence >= 0.5 {
+		t.Fatalf("guion OCR: %+v", fs)
+	}
+	if fs := e.Detect("RUN 80.000.0041", Location{}, "ocr"); len(fs) != 1 || fs[0].Normalized != "80000004-1" {
+		t.Fatalf("guion perdido en OCR: %+v", fs)
+	}
+	if fs := e.Detect("total 80.000.0041 y 12.345.6785", Location{}, "digital"); len(fs) != 0 {
+		t.Fatalf("sin guion en texto digital no es RUT: %+v", fs)
+	}
+	if fs := e.Detect("RUN 80.000.004+1", Location{}, "digital"); len(fs) != 0 {
+		t.Fatalf("en texto digital no se reinterpreta: %+v", fs)
+	}
+	if fs := e.Detect("RUN 80.000.004+4", Location{}, "ocr"); len(fs) != 0 {
+		t.Fatalf("DV inválido no debe aceptarse: %+v", fs)
+	}
 	// Texto OCR con RUT limpio sigue requiriendo revisión.
 	fs = e.Detect("12.345.678-5", Location{}, "ocr")
 	if len(fs) != 1 || fs[0].Status != StatusRequiresReview {

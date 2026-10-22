@@ -135,8 +135,13 @@ Ejemplo de `archivos`:
  ejemplo | clientes.csv  |   385 | completed |        |               9 |           9
  ejemplo | contrato.pdf  |  1358 | partial   |        |               2 |           2
 ```
-- `estado`: `completed` significa revisado entero; `partial`, revisado en parte (por ejemplo, el OCR de una página falló);
-  `failed`, no se pudo leer; `skipped`, omitido (el motivo aparece en `motivo`, por ejemplo `encrypted`).
+- `estado`: `completed` significa **leído entero**, no "encontró datos". Mira la columna `identificadores`: si es 0,
+  el archivo se leyó, pero no se reconoció ningún RUT ni correo. En una foto, eso puede deberse a la calidad de la
+  imagen. Revísalo con `./arsop.sh inspect`.
+- Los demás estados son:
+  - `partial`: revisado en parte (por ejemplo, el OCR de una página falló);
+  - `failed`: no se pudo leer;
+  - `skipped`: omitido (el motivo aparece en `motivo`, por ejemplo `encrypted`).
 - `identificadores`: cuántos RUT o emails distintos se encontraron en el archivo.
 
 ### Ver qué encontró en un archivo
@@ -193,6 +198,13 @@ Para saber en qué archivos aparece un RUT o correo en particular, usa la API (s
 - **Motor:** usa **Tesseract** local, en español e inglés (`ocr_languages` en `scanner.yaml`). No se envía nada a
   Internet. La imagen va al OCR en memoria y no se guarda en disco.
 - **Solo donde hace falta:** las páginas con texto digital no pasan por OCR, salvo que traigan un escaneo pegado.
+- **Fotos e imágenes sueltas (por ejemplo, fotos de carnet):** si la imagen es chica, se amplía (×2 a ×4) y se le
+  sube el contraste y la nitidez. Además se lee en **3 pasadas** con distinto preprocesamiento, porque cada pasada
+  falla en caracteres distintos. Los hallazgos se combinan sin contarlos dos veces. Las páginas de PDF usan una sola
+  pasada.
+- **Guion del dígito verificador:** en fotos, el guion suele leerse como `+`, `~` o una raya, o directamente se pierde
+  (`80.000.0041`). En texto OCR, un RUT con puntos de miles y esos errores se acepta **solo si el dígito verificador es
+  válido**, y siempre queda para revisión. En texto digital no se hace nada de esto.
 - **Revisión humana:** los hallazgos por OCR quedan con `metodo = ocr`, menor confianza y estado `requires_review`.
   El OCR puede confundir caracteres (por ejemplo `5` por `S`), así que un hallazgo por OCR debe revisarlo una
   persona.

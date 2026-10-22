@@ -93,6 +93,30 @@ def main_ocr(dest: str) -> None:
     scanned_page(["Boleta ficticia", "RUT cliente: 7.654.321-6"], rotate=1.5).convert("RGB").save(
         d / "foto.jpg", quality=85)
     mixed_pdf(d / "mixto.pdf")
+    carnet_like(d / "carnet_ficticio.png")
+
+
+def carnet_like(path: Path) -> None:
+    """Foto chica tipo cédula (740x415): fondo con trama, letra pequeña, leve desenfoque."""
+    import math
+
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+    w, h = 740, 415
+    img = Image.new("RGB", (w, h))
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            v = int(18 * math.sin(x / 9.0) * math.cos(y / 7.0))
+            px[x, y] = (225 + v // 2, 215 + v, 235 - v // 2)
+    draw = ImageDraw.Draw(img)
+    small, mid = ImageFont.load_default(size=13), ImageFont.load_default(size=21)
+    draw.text((240, 30), "REPUBLICA FICTICIA - DOCUMENTO DE PRUEBA", fill=(30, 60, 140), font=mid)
+    draw.text((240, 80), "APELLIDOS", fill=(30, 60, 140), font=small)
+    draw.text((240, 96), "PERSONA FICTICIA ONCE", fill=(20, 20, 20), font=mid)
+    draw.text((60, 330), "RUN", fill=(30, 60, 140), font=small)
+    draw.text((95, 350), "11.222.333-9", fill=(20, 20, 20), font=mid)
+    img.filter(ImageFilter.GaussianBlur(0.6)).save(path)
 
 
 def mixed_pdf(path: Path) -> None:

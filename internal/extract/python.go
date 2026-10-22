@@ -80,6 +80,7 @@ func (p *Python) Extract(ctx context.Context, kind string, file io.Reader, eng *
 		return nil, &CodedError{Code: ErrExtractorFailed, Retryable: true}
 	}
 	res := newResult()
+	ocrSeen := map[string]bool{}
 	var codeErr *CodedError
 	done := false
 	sc := bufio.NewScanner(out)
@@ -97,7 +98,18 @@ func (p *Python) Extract(ctx context.Context, kind string, file io.Reader, eng *
 			if m.Method == "ocr" {
 				method = "ocr" // menor confianza y revisión requerida (detection)
 			}
-			emit := func(f detection.Finding) { res.Findings = append(res.Findings, f) }
+			emit := func(f detection.Finding) {
+				if method == "ocr" {
+					// Una imagen se lee en varias pasadas: el mismo valor en la misma
+					// página cuenta una vez.
+					k := string(f.Type) + "\x00" + f.Normalized + "\x00" + itoa(f.Location.Page)
+					if ocrSeen[k] {
+						return
+					}
+					ocrSeen[k] = true
+				}
+				res.Findings = append(res.Findings, f)
+			}
 			if len(m.Text) > opt.Window {
 				_ = eng.DetectStream(stringsReader(m.Text), opt.Window, opt.Overlap, loc, method, emit)
 			} else {
