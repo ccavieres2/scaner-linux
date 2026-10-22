@@ -166,6 +166,8 @@ contenedor. Si la ruta no existe, avisa antes de escanear.
 | Comando | Qué hace |
 |---|---|
 | `./arsop.sh <comando del escáner>` | Ejecuta cualquier comando de [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md), por ejemplo `scan report --scan ID`. |
+| `./arsop.sh escaneos` | Lista los escaneos: fuente, ID, estado y fecha. |
+| `./arsop.sh archivos [FUENTE]` | Lista cada archivo revisado, con su estado y cuántos RUT o emails se encontraron. |
 | `./arsop.sh estado` | Muestra el estado de los contenedores. |
 | `./arsop.sh detener` / `iniciar` | Detiene o vuelve a levantar todo. Los datos se conservan. |
 | `./arsop.sh logs` | Muestra los logs de la API, que no contienen RUTs ni emails. |

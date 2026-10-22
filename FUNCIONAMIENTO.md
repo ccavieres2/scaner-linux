@@ -124,6 +124,23 @@ sudo -u arsop arsop-scanner scan process-pending --scan <ID> $F                 
 sudo -u arsop arsop-scanner scan report  --scan <ID> $F
 ```
 
+## 4b. Ver qué se escaneó (Docker)
+```bash
+./arsop.sh escaneos           # escaneos realizados
+./arsop.sh archivos rrhh      # archivos revisados de la fuente rrhh
+```
+Ejemplo de `archivos`:
+```
+ fuente  |    archivo    | bytes |  estado   | motivo | identificadores | apariciones
+ ejemplo | clientes.csv  |   385 | completed |        |               9 |           9
+ ejemplo | contrato.pdf  |  1358 | partial   |        |               2 |           2
+```
+- `estado`: `completed` significa revisado entero; `partial`, revisado en parte (por ejemplo, una página necesita OCR);
+  `failed`, no se pudo leer; `skipped`, omitido (el motivo aparece en `motivo`, por ejemplo `encrypted`).
+- `identificadores`: cuántos RUT o emails distintos se encontraron en el archivo.
+
+Los RUT y emails están cifrados y **no se listan**. Para saber dónde aparece uno en particular, usa la API (sección 7).
+
 ## 5. Si algo se corta
 - **Se reinició la máquina o se cortó el proceso:** ejecuta `scan resume --scan <ID>`. El escaneo sigue desde donde
   quedó, sin repetir los archivos ya procesados.
