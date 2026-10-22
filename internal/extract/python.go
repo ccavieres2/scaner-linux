@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"strings"
 	"time"
 
 	"arsop-scanner/internal/detection"
@@ -21,6 +22,12 @@ type Python struct {
 	MaxPages int
 	MemoryMB int    // tope duro de memoria del proceso (RLIMIT_AS, Linux)
 	TempDir  string // directorio de temporales del worker (vacío = por defecto del sistema)
+
+	// OCR (Fase 2). Sin idiomas no se hace OCR: imágenes y páginas sin texto
+	// quedan como cobertura parcial (*_needs_ocr).
+	OCRLanguages   []string
+	OCRPageTimeout time.Duration // por página o imagen
+	OCRDPI         int
 }
 
 // workerMsg es el contrato de salida del worker (versión 1).
@@ -32,6 +39,7 @@ type workerMsg struct {
 	Row        int      `json:"row,omitempty"`
 	Column     string   `json:"column,omitempty"`
 	Text       string   `json:"text,omitempty"`
+	Method     string   `json:"method,omitempty"` // "ocr" o vacío (texto digital)
 	Code       string   `json:"code,omitempty"`
 	Units      int      `json:"units,omitempty"`
 	Hidden     bool     `json:"hidden,omitempty"`
@@ -49,6 +57,15 @@ func (p *Python) Extract(ctx context.Context, kind string, file io.Reader, eng *
 	args := append(append([]string{}, p.Command[1:]...), "--kind", kind, "--max-pages", itoa(p.MaxPages))
 	if p.MemoryMB > 0 {
 		args = append(args, "--max-mem-mb", itoa(p.MemoryMB))
+	}
+	if len(p.OCRLanguages) > 0 {
+		args = append(args, "--ocr-langs", strings.Join(p.OCRLanguages, "+"))
+		if p.OCRPageTimeout > 0 {
+			args = append(args, "--ocr-timeout", itoa(int(p.OCRPageTimeout/time.Second)))
+		}
+		if p.OCRDPI > 0 {
+			args = append(args, "--ocr-dpi", itoa(p.OCRDPI))
+		}
 	}
 	cmd := exec.CommandContext(ctx, p.Command[0], args...)
 	// Entorno mínimo: sin proxies, sin variables heredadas.
@@ -76,18 +93,22 @@ func (p *Python) Extract(ctx context.Context, kind string, file io.Reader, eng *
 		switch m.T {
 		case "unit":
 			loc := detection.Location{Page: m.Page, Sheet: m.Sheet, Row: m.Row, Column: m.Column}
+			method := "digital"
+			if m.Method == "ocr" {
+				method = "ocr" // menor confianza y revisión requerida (detection)
+			}
 			emit := func(f detection.Finding) { res.Findings = append(res.Findings, f) }
 			if len(m.Text) > opt.Window {
-				_ = eng.DetectStream(stringsReader(m.Text), opt.Window, opt.Overlap, loc, "digital", emit)
+				_ = eng.DetectStream(stringsReader(m.Text), opt.Window, opt.Overlap, loc, method, emit)
 			} else {
-				for _, f := range eng.Detect(m.Text, loc, "digital") {
+				for _, f := range eng.Detect(m.Text, loc, method) {
 					emit(f)
 				}
 			}
 			res.Units++
 		case "warn":
 			partial := m.Code == WarnPageNeedsOCR || m.Code == WarnTruncated || m.Code == WarnImageNeedsOCR ||
-				m.Code == WarnPageUnreadable
+				m.Code == WarnPageUnreadable || m.Code == WarnOCRFailed
 			res.warn(sanitizeCode(m.Code), partial)
 		case "error":
 			c := sanitizeCode(m.Code)
@@ -117,6 +138,7 @@ var knownCodes = map[string]bool{
 	WarnPageNeedsOCR: true, WarnImageNeedsOCR: true, WarnHiddenSheet: true, WarnTruncated: true,
 	ErrEncrypted: true, ErrCorrupt: true, ErrUnsupported: true, ErrTimeout: true, ErrExtractorFailed: true,
 	ErrOutOfMemory: true, ErrZipBomb: true, ErrTempSpace: true, WarnPageUnreadable: true,
+	WarnOCRFailed: true, ErrImageTooLarge: true,
 }
 
 // sanitizeCode impide que el worker inyecte texto arbitrario en errores/logs.

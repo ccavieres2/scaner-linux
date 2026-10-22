@@ -1,6 +1,7 @@
 """Genera fixtures binarios sintéticos (datos 100 % ficticios).
 
 Uso: python -I tests/fixtures/synthetic/make_fixtures.py tests/fixtures/synthetic/tree
+     python -I tests/fixtures/synthetic/make_fixtures.py --ocr tests/fixtures/synthetic/ocr
 """
 
 import sys
@@ -60,5 +61,71 @@ def main(dest: str) -> None:
     wb.save(d / "planilla.xlsx")
 
 
+def scanned_page(lines: list[str], size=(1240, 1754), rotate: float = 0.0):
+    """Imagen tipo "hoja escaneada" (A4 a 150 dpi) con texto ficticio."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.new("L", size, 255)
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default(size=40)
+    y = 150
+    for line in lines:
+        draw.text((120, y), line, fill=0, font=font)
+        y += 70
+    return img.rotate(rotate, fillcolor=255, expand=False) if rotate else img
+
+
+def main_ocr(dest: str) -> None:
+    """Fixtures para OCR (Fase 2): todo el texto está en imágenes, sin texto digital."""
+    d = Path(dest)
+    d.mkdir(parents=True, exist_ok=True)
+    scanned_page([
+        "CERTIFICADO FICTICIO DE PRUEBA",
+        "Nombre: Persona Ficticia Nueve",
+        "RUT: 7.654.321-6",
+        "Correo: nueve.ficticia@example.cl",
+    ]).save(d / "escaneado.png")
+    # PDF escaneado: la página es solo una imagen (como sale de un escáner).
+    p1 = scanned_page(["DECLARACION FICTICIA", "Firmante: Persona Ficticia Diez"])
+    p2 = scanned_page(["Pagina 2", "RUT: 15.555.555-6", "Correo: diez.ficticio@example.org"])
+    p1.save(d / "escaneado.pdf", save_all=True, append_images=[p2], resolution=150)
+    # Foto JPEG levemente girada (como una foto de celular).
+    scanned_page(["Boleta ficticia", "RUT cliente: 7.654.321-6"], rotate=1.5).convert("RGB").save(
+        d / "foto.jpg", quality=85)
+    mixed_pdf(d / "mixto.pdf")
+
+
+def mixed_pdf(path: Path) -> None:
+    """PDF mixto: texto digital suficiente + un escaneo pegado con un RUT que solo está en la imagen."""
+    import ctypes
+    import io
+
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+
+    pdf = pdfium.PdfDocument.new()
+    page = pdf.new_page(595, 842)
+    font = raw.FPDFText_LoadStandardFont(pdf.raw, b"Helvetica")
+    for i, line in enumerate(["Documento mixto ficticio: este texto es digital y seleccionable.",
+                              "El anexo de abajo es un escaneo pegado como imagen."]):
+        obj = raw.FPDFPageObj_CreateTextObj(pdf.raw, font, 12.0)
+        buf = ctypes.create_string_buffer((line + "\0").encode("utf-16-le"))
+        raw.FPDFText_SetText(obj, ctypes.cast(buf, ctypes.POINTER(ctypes.c_ushort)))
+        raw.FPDFPageObj_Transform(obj, 1, 0, 0, 1, 50, 790 - 20 * i)
+        raw.FPDFPage_InsertObject(page.raw, obj)
+    jpg = io.BytesIO()
+    scanned_page(["ANEXO ESCANEADO", "RUT: 9.876.543-3"], size=(1240, 700)).convert("RGB").save(jpg, "JPEG", quality=90)
+    jpg.seek(0)
+    img = pdfium.PdfImage.new(pdf)
+    img.load_jpeg(jpg, pages=[page], inline=True)
+    img.set_matrix(pdfium.PdfMatrix().scale(495, 280).translate(50, 400))
+    page.insert_obj(img)
+    page.gen_content()
+    pdf.save(str(path))
+
+
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if sys.argv[1] == "--ocr":
+        main_ocr(sys.argv[2])
+    else:
+        main(sys.argv[1])

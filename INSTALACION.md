@@ -59,7 +59,7 @@ sudo -u arsop arsop-scanner scan start --source ejemplo --file /etc/arsop/scanne
 El último comando imprime `escaneo <ID> iniciado … finalizado: partial`.
 
 El estado `partial` es normal con los datos de ejemplo. Puede deberse a archivos grandes que quedaron pendientes o a
-una página que necesita OCR (Fase 2). Ver [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).
+un archivo que no se pudo leer entero. Ver [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).
 
 ### 4. Agregar tu propia carpeta
 1. Deja la carpeta disponible en la VM **en solo lectura**.
@@ -195,6 +195,10 @@ instalador lo indica y hay que pedírselo al cliente.
 
 No necesita `git`, `make`, `python3-venv` ni PostgreSQL instalado.
 
+**OCR:** para leer imágenes y PDF escaneados hace falta Tesseract (`tesseract-ocr` y `tesseract-ocr-spa`), y un
+usuario sin administrador no puede instalarlo. Si el cliente ya lo tiene instalado, se usa automáticamente. Si no,
+las imágenes quedan como `partial` (`image_needs_ocr`). La instalación con Docker (B) ya trae Tesseract incluido.
+
 ### Instalar
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/ccavieres2/scaner-linux-sin-intefaz/main/scripts/install-user.sh
@@ -260,4 +264,4 @@ El `.gitignore` ya los excluye. Igual, revisa `git status` antes de cada commit.
 ## Pendiente para producción
 - Cifrado del disco (LUKS), respaldos de PostgreSQL y rotación de las claves HMAC/AES.
 - Un pentest externo antes de exponer la API en la red del cliente.
-- OCR de PDFs escaneados (Fase 2).
+- Medir la calidad del OCR con documentos reales del cliente (benchmark de la Fase 2).

@@ -3,7 +3,8 @@
 Motor on-premise de descubrimiento de datos personales (RUT, correo) en file servers, como apoyo a
 derechos ARSOP (Ley 21.719). Requisitos: `ESPECIFICACION_TECNICA_COMPLETA_SCANNER_ARSOP_21719.md`.
 
-> **Estado: Fase 1** (vertical slice sin OCR): inventario seguro, TXT/CSV/PDF digital/XLSX, RUT/email,
+> **Estado: Fase 2 en curso** (OCR local con Tesseract: imágenes JPG/PNG/TIFF, PDF escaneados y mixtos) sobre la
+> Fase 1: inventario seguro, TXT/CSV/PDF digital/XLSX, RUT/email,
 > PostgreSQL, API de búsqueda. **No apto para producción** (ver `docs/security-controls.md`). No certifica cumplimiento legal.
 
 ## Uso

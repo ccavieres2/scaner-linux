@@ -64,7 +64,7 @@ archivos)
   f="${2:-}"; [[ "$f" =~ ^[A-Za-z0-9_.-]*$ ]] || { echo "fuente inválida" >&2; exit 2; }
   dc exec -T postgres psql -U arsop_scanner -d arsop -c "SELECT s.logical_name AS fuente, f.relative_path AS archivo,
     f.size_bytes AS bytes, f.state AS estado, f.skip_reason AS motivo, count(fi.id) AS identificadores,
-    coalesce(sum(fi.occurrences), 0) AS apariciones
+    coalesce(sum(fi.occurrences), 0) AS apariciones, string_agg(DISTINCT fi.detection_method, ',') AS metodo
     FROM files f JOIN sources s ON s.id = f.source_id
     LEFT JOIN file_versions v ON v.id = f.last_success_version
     LEFT JOIN findings fi ON fi.file_version_id = v.id

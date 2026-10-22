@@ -33,8 +33,8 @@ const MaxStoredLocations = 100
 
 // Clases de cola. Cada una tiene su propio grupo de workers.
 const (
-	ClassLight = "light" // TXT/CSV/imágenes: Go, lectura por partes, memoria acotada
-	ClassHeavy = "heavy" // PDF/XLSX: proceso Python aislado con tope de memoria
+	ClassLight = "light" // TXT/CSV: Go, lectura por partes, memoria acotada
+	ClassHeavy = "heavy" // PDF/XLSX/imágenes (OCR): proceso Python aislado con tope de memoria
 )
 
 // LightReserveMB es la memoria que reserva cada worker liviano del presupuesto.
@@ -153,7 +153,7 @@ func (p *Pipeline) inventory(ctx context.Context, scan *persistence.Scan, src So
 // archivo). El tipo real se verifica al procesar y se reclasifica si difiere.
 func classByName(rel string) string {
 	switch strings.ToLower(path.Ext(rel)) {
-	case ".pdf", ".xlsx", ".xlsm":
+	case ".pdf", ".xlsx", ".xlsm", ".png", ".jpg", ".jpeg", ".tif", ".tiff":
 		return ClassHeavy
 	}
 	return ClassLight
@@ -161,7 +161,7 @@ func classByName(rel string) string {
 
 func classByKind(kind string) string {
 	switch kind {
-	case catalog.KindPDF, catalog.KindXLSX:
+	case catalog.KindPDF, catalog.KindXLSX, catalog.KindImage:
 		return ClassHeavy
 	}
 	return ClassLight
@@ -351,8 +351,8 @@ func (p *Pipeline) processFile(ctx context.Context, src Source, class string, t 
 	case catalog.KindPDF, catalog.KindXLSX:
 		res, err = p.Python.Extract(ctx, kind, r, p.Engine, p.Extract)
 	case catalog.KindImage:
-		// OCR llega en Fase 2: cobertura parcial explícita, sin hallazgos.
-		res = &extract.Result{Warnings: map[string]int{extract.WarnImageNeedsOCR: 1}, Partial: true}
+		// OCR en el worker aislado; sin tesseract: image_needs_ocr (parcial).
+		res, err = p.Python.Extract(ctx, "image", r, p.Engine, p.Extract)
 	default:
 		return nil, kind, &fileErr{code: "unsupported_" + kind, state: "skipped"}
 	}

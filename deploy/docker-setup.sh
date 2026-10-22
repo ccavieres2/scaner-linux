@@ -12,12 +12,15 @@ umask 077
 V=/vol
 M=$V/.master
 
+# Claves binarias de 32 bytes. Se repite el sorteo si el último byte es \n o \r,
+# porque el lector de secretos los quita (la clave quedaría de 31 bytes).
+newkey() { while :; do head -c 32 /dev/urandom > "$1"; tail -c 1 "$1" | od -An -tx1 | grep -qE "0a|0d" || break; done; }
 rand() { head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
 
 mkdir -p "$M" && chmod 0700 "$V" "$M"
 [ -f "$M/db_password" ]    || rand 32 > "$M/db_password"
-[ -f "$M/hmac_key" ]       || head -c 32 /dev/urandom > "$M/hmac_key"
-[ -f "$M/encryption_key" ] || head -c 32 /dev/urandom > "$M/encryption_key"
+[ -f "$M/hmac_key" ]       || newkey "$M/hmac_key"
+[ -f "$M/encryption_key" ] || newkey "$M/encryption_key"
 
 TOKEN=""
 if [ ! -f "$M/api_principals.yaml" ] || [ "${1:-}" = "nuevo-token" ]; then

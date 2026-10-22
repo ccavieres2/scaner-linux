@@ -29,10 +29,10 @@ scanner:
   large_files: defer              # defer: se saltan y quedan en `scan pending` hasta `scan process-pending`
                                   # last:  se procesan en el mismo escaneo, después de los pequeños
   temp_dir: /var/tmp/arsop        # temporales del worker en disco cifrado; se borran solos
-  max_ocr_workers: 2
+  max_ocr_workers: 2              # reservado: hoy el OCR corre en la cola pesada (max_heavy_workers)
   max_inflight_files: 64
-  max_ocr_seconds_per_page: 60
-  ocr_languages: [spa, eng]
+  max_ocr_seconds_per_page: 60    # tope por página o imagen; si se excede: partial (ocr_failed)
+  ocr_languages: [spa, eng]       # Tesseract local; los idiomas deben estar instalados
   retry_max: 3
   resume_on_restart: true
   network_access: false           # true rechazado

@@ -32,7 +32,7 @@ command -v sudo >/dev/null || die "se requiere sudo"
 
 log "Paquetes del sistema"
 sudo apt-get update -qq
-sudo apt-get install -y -qq git make curl postgresql python3-venv cifs-utils ca-certificates >/dev/null
+sudo apt-get install -y -qq git make curl postgresql python3-venv cifs-utils ca-certificates tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng >/dev/null
 
 log "Go ${GO_VERSION}"
 if ! /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION} "; then
@@ -90,8 +90,11 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='arsop'" | g
   || sudo -u postgres createdb -O arsop_scanner arsop
 
 log "Secretos (solo si no existen)"
-sudo test -f "$SECRETS/hmac_key"       || sudo sh -c "head -c 32 /dev/urandom > $SECRETS/hmac_key"
-sudo test -f "$SECRETS/encryption_key" || sudo sh -c "head -c 32 /dev/urandom > $SECRETS/encryption_key"
+# Claves binarias de 32 bytes. Se repite el sorteo si el último byte es \n o \r,
+# porque el lector de secretos los quita (la clave quedaría de 31 bytes).
+newkey() { sudo sh -c 'while :; do head -c 32 /dev/urandom > "$0"; tail -c 1 "$0" | od -An -tx1 | grep -qE "0a|0d" || break; done' "$1"; }
+sudo test -f "$SECRETS/hmac_key"       || newkey "$SECRETS/hmac_key"
+sudo test -f "$SECRETS/encryption_key" || newkey "$SECRETS/encryption_key"
 TOKEN=""
 if ! sudo test -f "$SECRETS/api_principals.yaml"; then
   TOKEN=$(head -c 64 /dev/urandom | base64 -w0 | tr -dc 'A-Za-z0-9' | head -c 43)

@@ -34,6 +34,8 @@ const (
 	ErrZipBomb         = "zip_bomb_suspected"
 	ErrTempSpace       = "temp_space_exhausted"
 	WarnPageUnreadable = "page_unreadable"
+	WarnOCRFailed      = "ocr_failed" // tesseract falló o excedió el tiempo en una página/imagen
+	ErrImageTooLarge   = "image_too_large"
 )
 
 // Result resume la extracción de un archivo.
@@ -42,7 +44,7 @@ type Result struct {
 	Warnings map[string]int
 	Units    int
 	// Partial indica que parte del contenido no fue cubierto (p. ej. páginas
-	// que requieren OCR en Fase 1).
+	// que requieren OCR sin tesseract disponible, o en las que el OCR falló).
 	Partial bool
 }
 

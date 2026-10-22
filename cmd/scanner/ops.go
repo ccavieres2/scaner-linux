@@ -118,7 +118,8 @@ func newPipeline(rt *app.Runtime, tenant uuid.UUID) *pipeline.Pipeline {
 	return &pipeline.Pipeline{
 		Store: rt.Store, Key: rt.Key, Sealer: rt.Sealer, Engine: detection.NewEngine(detection.DefaultOptions()),
 		Python: &extract.Python{Command: c.ExtractorCommand, Timeout: time.Duration(c.MaxExtractSecondsPerFile) * time.Second,
-			MaxPages: c.MaxPDFPages, MemoryMB: c.WorkerMemoryMB, TempDir: c.TempDir},
+			MaxPages: c.MaxPDFPages, MemoryMB: c.WorkerMemoryMB, TempDir: c.TempDir,
+			OCRLanguages: c.OCRLanguages, OCRPageTimeout: time.Duration(c.MaxOCRSecondsPerPage) * time.Second},
 		Log: rt.Log, Tenant: tenant, LightWorkers: c.MaxExtractWorkers, HeavyWorkers: c.MaxHeavyWorkers,
 		WorkerMemoryMB: c.WorkerMemoryMB, MemoryBudgetMB: c.MemoryBudgetMB, LargeFileBytes: c.LargeFileBytes,
 		DeferLarge: c.LargeFiles == "defer",

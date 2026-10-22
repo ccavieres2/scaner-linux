@@ -135,7 +135,7 @@ Ejemplo de `archivos`:
  ejemplo | clientes.csv  |   385 | completed |        |               9 |           9
  ejemplo | contrato.pdf  |  1358 | partial   |        |               2 |           2
 ```
-- `estado`: `completed` significa revisado entero; `partial`, revisado en parte (por ejemplo, una página necesita OCR);
+- `estado`: `completed` significa revisado entero; `partial`, revisado en parte (por ejemplo, el OCR de una página falló);
   `failed`, no se pudo leer; `skipped`, omitido (el motivo aparece en `motivo`, por ejemplo `encrypted`).
 - `identificadores`: cuántos RUT o emails distintos se encontraron en el archivo.
 
@@ -148,11 +148,33 @@ Los RUT y emails están cifrados y **no se listan**. Para saber dónde aparece u
   montar la carpeta y ejecuta `scan resume`.
 - **Hay un PDF corrupto o con contraseña:** aparece en `scan report` con su motivo. No detiene el escaneo.
 
-## 6. Tipos de archivo soportados (Fase 1)
+## 6. Tipos de archivo soportados
 - TXT, CSV y XLSX.
 - PDF con texto digital.
 
-Los PDFs escaneados (imágenes) necesitan OCR, que llega en la Fase 2. Por ahora se reportan como pendientes de OCR.
+- **Con OCR (Fase 2):**
+  - imágenes JPG, PNG y TIFF, incluidos los TIFF de varias páginas y las fotos giradas de celular;
+  - PDF escaneados;
+  - PDF mixtos: una página con texto digital que además trae un escaneo pegado (una imagen que cubre al menos el 20 %
+    de la página) también pasa por OCR.
+
+### Cómo funciona el OCR
+- **Motor:** usa **Tesseract** local, en español e inglés (`ocr_languages` en `scanner.yaml`). No se envía nada a
+  Internet. La imagen va al OCR en memoria y no se guarda en disco.
+- **Solo donde hace falta:** las páginas con texto digital no pasan por OCR, salvo que traigan un escaneo pegado.
+- **Revisión humana:** los hallazgos por OCR quedan con `metodo = ocr`, menor confianza y estado `requires_review`.
+  El OCR puede confundir caracteres (por ejemplo `5` por `S`), así que un hallazgo por OCR debe revisarlo una
+  persona.
+- **Límites:** cada página o imagen tiene un tiempo máximo (`max_ocr_seconds_per_page`, 60 s por defecto). Si se
+  excede o el OCR falla, la página queda `partial` con el aviso `ocr_failed`. Las imágenes gigantes (más de 100
+  megapíxeles) se rechazan como `image_too_large`.
+- **Sin Tesseract instalado:** por ejemplo, en la instalación sin administrador. Las imágenes y páginas escaneadas
+  quedan `partial` con el aviso `image_needs_ocr` o `page_needs_ocr`, igual que antes.
+- **Tiempo por archivo:** un PDF escaneado de muchas páginas puede tardar. El tope por archivo es
+  `max_extract_seconds_per_file` (300 s por defecto); súbelo si tienes escaneos de más de unas 80 páginas.
+
+Los datos de ejemplo de Docker incluyen la carpeta `escaneados/`, con una imagen, una foto, un PDF escaneado y uno
+mixto (todos ficticios), para comprobar el OCR.
 
 ## 7. API
 

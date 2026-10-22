@@ -125,8 +125,11 @@ fi
 
 # --- Secretos y configuración ---------------------------------------------------------
 log "Secretos (solo si no existen)"
-[ -f "$A/secrets/hmac_key" ]       || head -c 32 /dev/urandom > "$A/secrets/hmac_key"
-[ -f "$A/secrets/encryption_key" ] || head -c 32 /dev/urandom > "$A/secrets/encryption_key"
+# Claves binarias de 32 bytes. Se repite el sorteo si el último byte es \n o \r,
+# porque el lector de secretos los quita (la clave quedaría de 31 bytes).
+newkey() { while :; do head -c 32 /dev/urandom > "$1"; tail -c 1 "$1" | od -An -tx1 | grep -qE "0a|0d" || break; done; }
+[ -f "$A/secrets/hmac_key" ]       || newkey "$A/secrets/hmac_key"
+[ -f "$A/secrets/encryption_key" ] || newkey "$A/secrets/encryption_key"
 TOKEN=""
 if [ ! -f "$A/secrets/api_principals.yaml" ]; then
   TOKEN=$(head -c 64 /dev/urandom | base64 -w0 | tr -dc 'A-Za-z0-9' | head -c 43)
