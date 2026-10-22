@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.
  && mkdir -p /var/tmp/arsop && chown 10001:10001 /var/tmp/arsop && chmod 0700 /var/tmp/arsop
 COPY --from=build /out/scanner /usr/local/bin/scanner
 COPY workers/extractor/extract.py /opt/arsop/workers/extractor/extract.py
+# Datos ficticios de ejemplo (fuente "ejemplo") y preparación automática (servicio setup).
+COPY tests/fixtures/synthetic/tree /opt/arsop/ejemplo
+COPY deploy/docker-setup.sh /usr/local/bin/arsop-setup
+RUN chmod -R a-w /opt/arsop/ejemplo && chmod 0755 /usr/local/bin/arsop-setup
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/scanner"]
 CMD ["--help"]

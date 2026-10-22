@@ -61,6 +61,11 @@ usuario de servicio:
 ```bash
 sudo -u arsop arsop-scanner <comando> --file /etc/arsop/scanner.yaml
 ```
+Con **Docker**, el mismo comando se ejecuta así, sin `--file`:
+```bash
+./arsop.sh <comando>
+```
+Por ejemplo, `./arsop.sh scan start --source ejemplo`.
 
 ### Configuración y preparación
 | Comando | Qué hace |

@@ -38,7 +38,7 @@ Windows), **Implementado sin prueba**, **Diseñado**, **Pendiente**.
 | Cursores firmados, ligados a la consulta, expirables | Implementado; paginación probada en store | `api/server.go` |
 | Sin PII en logs (RUT, email, nombres de archivo, case_reference) | Probado | E2E (SEC-006) |
 | Cabeceras `no-store`, `nosniff`, límite de cuerpo, `DisallowUnknownFields` | Probado | E2E |
-| Contenedores no-root, read-only, `cap_drop ALL`, red interna, fuentes `:ro`, puertos solo loopback | Implementado; `docker compose config` válido; **no ejecutado** (Docker no disponible) | `deploy/compose.yaml` |
+| Contenedores no-root, read-only, `cap_drop ALL`, red interna, fuentes `:ro`, puertos solo loopback | Implementado y probado de punta a punta (`./arsop.sh instalar`, escaneo, pendientes, API) | `compose.yaml` |
 | mTLS: certificado de cliente obligatorio y verificado contra CA propia | Probado | `TestMTLSTokenBinding` |
 | Token ligado a la huella del certificado (token robado no sirve en otro equipo) | Probado | `TestMTLSTokenBinding` |
 | Vencimiento de credenciales (`expires_at`) y aviso de rotación | Probado (vencido → 401) | `TestMTLSTokenBinding` |

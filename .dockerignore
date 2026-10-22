@@ -1,0 +1,12 @@
+# Nunca enviar datos, claves ni configuraciones locales al contexto de construcción.
+.git
+bin
+entrada
+local
+secrets
+deploy/secrets
+deploy/config
+*.key
+*.pem
+*.env
+coverage.out

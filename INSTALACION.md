@@ -3,7 +3,7 @@
 Hay tres formas de instalarlo en Linux:
 
 - **A. Máquina virtual o servidor Ubuntu**, con un script automático. Requiere `sudo`. Es la forma recomendada para probar.
-- **B. Docker Compose.** Requiere Docker, que en la práctica equivale a permisos de administrador.
+- **B. Docker**, la más simple: clonar y ejecutar `./arsop.sh instalar`. Requiere Docker, que en la práctica equivale a permisos de administrador.
 - **C. Sin permisos de administrador**, ni `sudo` ni Docker. Todo queda en la carpeta del usuario.
 
 > Esto es una instalación de **prueba / Fase 1**. Antes de usarlo con datos reales de clientes, revisa
@@ -115,38 +115,65 @@ Para exponer la API a la aplicación de un cliente, con certificado, token e IP 
 
 ---
 
-## B. Docker Compose
+## B. Docker (la más simple)
 
-Requisitos: Linux con Docker y el plugin Compose.
+Solo necesitas **Docker** con el plugin Compose, en versión 26 o superior. No hace falta instalar Go, Python ni
+PostgreSQL: todo va dentro de los contenedores.
 
 ```bash
 git clone https://github.com/ccavieres2/scaner-linux-sin-intefaz.git
-cd scaner-linux-sin-intefaz/deploy
-sh make-dev-secrets.sh            # claves de desarrollo en deploy/secrets (no se suben a GitHub)
-nano config/scanner.yaml          # revisar fuentes y límites
+cd scaner-linux-sin-intefaz
+./arsop.sh instalar
 ```
 
-Monta la carpeta que vas a escanear en el host, en `/data/input/<fuente>` y en solo lectura.
+`./arsop.sh instalar` hace lo siguiente:
+- construye las imágenes;
+- genera las claves y el token, y los guarda en un volumen de Docker con permisos 0600, uno por servicio;
+- crea `./local/scanner.yaml`;
+- levanta PostgreSQL y la API, que queda en `127.0.0.1:8080`;
+- muestra **el token de la API una sola vez**.
 
-Los contenedores corren como el UID 10001 (escáner) y el 65532 (API). Los archivos de `deploy/secrets` deben pertenecer
-a esos usuarios y tener permisos 0600:
+Pruébalo con los datos ficticios incluidos:
 ```bash
-sudo chown 10001 secrets/db_password secrets/hmac_key secrets/encryption_key
-sudo chown 65532 secrets/api_principals.yaml
+./arsop.sh scan start --source ejemplo
+./arsop.sh scan report --scan <ID>
 ```
 
-Arranque:
-```bash
-docker compose build
-docker compose up -d postgres
-docker compose run --rm scanner init          --file /etc/arsop/scanner.yaml
-docker compose up -d api
-docker compose run --rm scanner sources check --file /etc/arsop/scanner.yaml
-docker compose run --rm scanner scan start --source rrhh --file /etc/arsop/scanner.yaml
-```
+### Escanear tus carpetas
+1. Pon la carpeta dentro de `./entrada/`, por ejemplo `./entrada/rrhh`. También puedes montar ahí un recurso
+   compartido.
+2. Agrega una línea en `sources:` de `./local/scanner.yaml`:
+   ```yaml
+     - {id: rrhh, root_path: /data/input/rrhh}
+   ```
+3. Escanea:
+   ```bash
+   ./arsop.sh sources check
+   ./arsop.sh scan start --source rrhh
+   ./arsop.sh scan pending --scan <ID>
+   ```
 
-Con Docker, todos los comandos de [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md) se ejecutan como
-`docker compose run --rm scanner <comando> --file /etc/arsop/scanner.yaml`.
+Si los archivos están en otra ruta del host, puedes usarla en lugar de `./entrada`:
+`ARSOP_INPUT=/mnt/compartida ./arsop.sh scan start --source rrhh`.
+
+Las carpetas se montan siempre en **solo lectura**. `./entrada` y `./local` nunca se suben a GitHub ni entran a las
+imágenes.
+
+### Comandos de administración
+| Comando | Qué hace |
+|---|---|
+| `./arsop.sh <comando del escáner>` | Ejecuta cualquier comando de [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md), por ejemplo `scan report --scan ID`. |
+| `./arsop.sh estado` | Muestra el estado de los contenedores. |
+| `./arsop.sh detener` / `iniciar` | Detiene o vuelve a levantar todo. Los datos se conservan. |
+| `./arsop.sh logs` | Muestra los logs de la API, que no contienen RUTs ni emails. |
+| `./arsop.sh token-nuevo` | Reemplaza el token de la API, por ejemplo si se perdió. |
+| `./arsop.sh actualizar` | Hace `git pull`, reconstruye y reinicia. |
+| `./arsop.sh desinstalar` | Borra contenedores, base de datos y claves. Pide confirmación. |
+
+Si no quieres usar `arsop.sh`, `docker compose up -d --build` hace lo mismo que `instalar`. En ese caso, el token se
+ve con `docker compose logs setup`.
+
+**Windows:** ejecuta `./arsop.sh` desde **Git Bash**, con Docker Desktop abierto.
 
 ---
 

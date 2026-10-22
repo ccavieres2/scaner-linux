@@ -1,21 +1,26 @@
-# Despliegue (referencia, Fase 1)
+# Despliegue con Docker
 
-1. **Host**: Linux x86_64, kernel ≥ 5.6, Docker + Compose, disco de datos cifrado (LUKS), NTP, firewall.
-2. **Fuentes**: el cliente monta SMB/NFS en `/data/input/<fuente>` con una cuenta de **solo lectura**
-   (ej. `mount -t cifs -o ro,credentials=/root/.smb-cred,uid=10001 //nas/rrhh /data/input/rrhh`).
-   `:ro` en Docker no reemplaza los permisos del NAS.
-3. **Secretos**: `./make-dev-secrets.sh` (desarrollo). En producción, archivos del gestor del cliente con
-   permisos 0600 y propietario igual al UID del contenedor (scanner 10001, api 65532), o mecanismo equivalente.
-4. **Configuración**: revisar `deploy/config/scanner.yaml` (fuentes, límites). `container_bind_all: true` solo en contenedor.
-5. **Arranque**:
-   ```sh
-   docker compose up -d postgres
-   docker compose run --rm scanner init --file /etc/arsop/scanner.yaml
-   docker compose up -d api
-   docker compose run --rm scanner sources check --file /etc/arsop/scanner.yaml
-   docker compose run --rm scanner scan start --source rrhh --file /etc/arsop/scanner.yaml
-   ```
-6. **Exposición**: la API publica solo en `127.0.0.1:8080`; poner un reverse proxy TLS controlado delante.
-7. **Verificar** antes de producción: restauración de backup, reinicio en medio de un escaneo (`scan resume`), corte de mount.
+La instalación con Docker está en [INSTALACION.md](../INSTALACION.md), sección B. En resumen: `./arsop.sh instalar`.
 
-Estado: el archivo compose es sintácticamente válido; las imágenes se construyeron y probaron de punta a punta (escaneo, pendientes y API con mTLS).
+| Archivo | Para qué sirve |
+|---|---|
+| `../compose.yaml` | Define los servicios: `setup`, `postgres`, `migrate`, `api` y `scanner`. |
+| `docker-setup.sh` | Corre en el servicio `setup`. Genera claves, token y configuración si faltan; nunca sobrescribe. |
+| `dockerfiles/` | Las imágenes del escáner (Go + Python) y de la API (distroless). |
+
+## Seguridad
+- **Contenedores endurecidos:** sistema de archivos de solo lectura, `cap_drop: ALL`, `no-new-privileges` y sin core
+  dumps.
+- **Sin root:** el escáner corre con el UID 10001 y la API con el 65532. Solo `setup` corre como root, y solo un
+  momento, para fijar el dueño de las claves.
+- **Claves:** viven en el volumen `arsop_secrets`, con una carpeta 0700 por servicio y archivos 0600. Cada contenedor
+  monta solo su carpeta.
+- **Red:** PostgreSQL y el escáner están en una red interna, sin salida a Internet. La API publica solo en
+  `127.0.0.1:8080`.
+- **Fuentes:** se montan en solo lectura (`./entrada` o `ARSOP_INPUT`). En un NAS, usa además una cuenta de solo
+  lectura, porque `:ro` en Docker no reemplaza los permisos del NAS.
+
+## Antes de producción
+- Pon los volúmenes en un disco cifrado (LUKS) y configura respaldos de `arsop_pgdata` y de `arsop_secrets`.
+- Para exponer la API a un cliente, configura mTLS + token (`../docs/API-CLIENTE.md`) y aplica la lista de IPs
+  permitidas en el firewall del host.

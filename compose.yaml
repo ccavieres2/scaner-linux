@@ -1,0 +1,111 @@
+# Escáner ARSOP con Docker Compose. Uso normal:  ./arsop.sh instalar
+# (o:  docker compose up -d --build   y el token con:  docker compose logs setup)
+#
+# - ./entrada/   carpetas a escanear (montadas en SOLO LECTURA en /data/input)
+# - ./local/     scanner.yaml editable (se crea solo la primera vez)
+# - claves y base de datos: volúmenes de Docker (nunca en el repositorio)
+# Requiere Docker Engine 26+ (montajes con subpath).
+name: arsop
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  ulimits:
+    core: 0            # sin core dumps (spec §25)
+    nofile: 4096
+
+x-scanner-image: &scanner-image
+  image: arsop-scanner:local
+  build: {context: ., dockerfile: deploy/dockerfiles/scanner.Dockerfile}
+
+services:
+  # Una vez por arranque: crea claves, token y configuración si faltan.
+  setup:
+    <<: [*hardening, *scanner-image]
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    entrypoint: ["/usr/local/bin/arsop-setup"]
+    command: []
+    restart: "no"
+    network_mode: none
+    volumes:
+      - secrets:/vol
+      - ./local:/etc/arsop
+
+  postgres:
+    <<: *hardening
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]   # requeridas por initdb/entrypoint
+    depends_on: {setup: {condition: service_completed_successfully}}
+    environment:
+      POSTGRES_DB: arsop
+      POSTGRES_USER: arsop_scanner
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data      # en producción: disco cifrado (LUKS)
+      - {type: volume, source: secrets, target: /run/secrets, read_only: true, volume: {subpath: postgres}}
+    tmpfs:
+      - /var/run/postgresql:size=16m,mode=0775
+      - /tmp:size=64m,noexec,nosuid
+    networks: [backend]                       # sin puertos publicados
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arsop_scanner -d arsop"]
+      interval: 5s
+      retries: 12
+
+  # Aplica migraciones (scanner init) antes de levantar la API.
+  migrate:
+    <<: [*hardening, *scanner-image]
+    command: ["init"]
+    restart: "no"
+    depends_on: {postgres: {condition: service_healthy}}
+    volumes:
+      - ./local:/etc/arsop:ro
+      - {type: volume, source: secrets, target: /run/secrets, read_only: true, volume: {subpath: scanner}}
+    networks: [backend]
+
+  api:
+    <<: *hardening
+    image: arsop-api:local
+    build: {context: ., dockerfile: deploy/dockerfiles/api.Dockerfile}
+    restart: unless-stopped
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    volumes:
+      - ./local:/etc/arsop:ro
+      - {type: volume, source: secrets, target: /run/secrets, read_only: true, volume: {subpath: api}}
+    networks: [backend, frontend]
+    ports:
+      - "127.0.0.1:8080:8080"                 # solo loopback del host
+    mem_limit: 512m
+    cpus: 1.0
+
+  # Comandos del escáner:  ./arsop.sh scan start --source ejemplo
+  scanner:
+    <<: [*hardening, *scanner-image]
+    restart: "no"
+    profiles: [tools]
+    depends_on: {postgres: {condition: service_healthy}}
+    volumes:
+      - ./local:/etc/arsop:ro
+      - ${ARSOP_INPUT:-./entrada}:/data/input:ro   # fuentes SIEMPRE en solo lectura
+      - {type: volume, source: secrets, target: /run/secrets, read_only: true, volume: {subpath: scanner}}
+      - scannertmp:/var/tmp/arsop
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+    networks: [backend]                        # red interna: sin salida a Internet
+    mem_limit: 3g        # > scanner.memory_budget_mb + margen del proceso Go
+    cpus: 4.0
+
+networks:
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  pgdata: {}
+  secrets: {}
+  scannertmp: {}
