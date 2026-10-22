@@ -146,6 +146,34 @@ func (s *Store) FilesWithFindings(ctx context.Context, tenant, source uuid.UUID,
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
+// FileWithoutFindings es un archivo activo cuya última versión no tiene hallazgos.
+type FileWithoutFindings struct {
+	RelPath    string
+	State      string
+	SkipReason string
+	Deferred   bool // pendiente por tamaño (scan process-pending)
+}
+
+// FilesWithoutFindings lista los archivos de una fuente que inspect --todos no
+// muestra, con el motivo, para que ninguno quede oculto en silencio.
+func (s *Store) FilesWithoutFindings(ctx context.Context, tenant, source uuid.UUID, limit int) ([]FileWithoutFindings, error) {
+	rows, err := s.pool.Query(ctx, `SELECT f.relative_path, f.state, COALESCE(f.skip_reason, ''),
+			EXISTS (SELECT 1 FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
+			        WHERE v.file_id = f.id AND t.state = 'deferred')
+		FROM files f
+		WHERE f.tenant_id = $1 AND f.source_id = $2 AND f.active
+		  AND NOT EXISTS (SELECT 1 FROM findings fi WHERE fi.file_version_id = f.last_success_version)
+		ORDER BY f.relative_path LIMIT $3`, tenant, source, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (FileWithoutFindings, error) {
+		var f FileWithoutFindings
+		err := r.Scan(&f.RelPath, &f.State, &f.SkipReason, &f.Deferred)
+		return f, err
+	})
+}
+
 // Coverage describe la frescura y completitud del índice (spec §10: no
 // encontrar un dato no implica que no exista).
 type Coverage struct {

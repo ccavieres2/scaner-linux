@@ -16,8 +16,9 @@ const (
 	KindDOCX    = "docx"
 	KindCSV     = "csv"
 	KindText    = "text"
-	KindImage   = "image"
-	KindOLE     = "ole" // XLS/DOC antiguos
+	KindImage   = "image" // PNG, JPEG, TIFF, WEBP, BMP, GIF
+	KindHEIC    = "heic"  // HEIC/HEIF/AVIF (fotos de iPhone): aún no soportado
+	KindOLE     = "ole"   // XLS/DOC antiguos
 	KindZip     = "zip"
 	KindUnknown = "unknown"
 )
@@ -40,8 +41,14 @@ func Sniff(r io.ReaderAt, size int64, relPath string) string {
 		return KindOLE
 	case bytes.HasPrefix(head, []byte("\x89PNG\r\n\x1a\n")),
 		bytes.HasPrefix(head, []byte{0xFF, 0xD8, 0xFF}),
-		bytes.HasPrefix(head, []byte("II*\x00")), bytes.HasPrefix(head, []byte("MM\x00*")):
+		bytes.HasPrefix(head, []byte("II*\x00")), bytes.HasPrefix(head, []byte("MM\x00*")),
+		len(head) >= 12 && bytes.HasPrefix(head, []byte("RIFF")) && bytes.Equal(head[8:12], []byte("WEBP")),
+		bytes.HasPrefix(head, []byte("BM")) && len(head) >= 26 && looksBMP(head),
+		bytes.HasPrefix(head, []byte("GIF87a")), bytes.HasPrefix(head, []byte("GIF89a")):
 		return KindImage
+	case len(head) >= 12 && bytes.Equal(head[4:8], []byte("ftyp")) && isHEIF(head[8:12]):
+		// Fotos de iPhone (aunque se llamen .jpg): no soportado aún, se informa como tal.
+		return KindHEIC
 	}
 	if looksText(head) {
 		switch strings.ToLower(path.Ext(relPath)) {
@@ -51,6 +58,24 @@ func Sniff(r io.ReaderAt, size int64, relPath string) string {
 		return KindText
 	}
 	return KindUnknown
+}
+
+// looksBMP evita confundir texto que empiece con "BM" con un mapa de bits:
+// exige un encabezado DIB de tamaño conocido (offset 14).
+func looksBMP(h []byte) bool {
+	switch uint32(h[14]) | uint32(h[15])<<8 | uint32(h[16])<<16 | uint32(h[17])<<24 {
+	case 12, 40, 52, 56, 64, 108, 124:
+		return true
+	}
+	return false
+}
+
+func isHEIF(brand []byte) bool {
+	switch string(brand) {
+	case "heic", "heix", "hevc", "heim", "heis", "mif1", "msf1", "avif":
+		return true
+	}
+	return false
 }
 
 func sniffZip(r io.ReaderAt, size int64) string {

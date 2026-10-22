@@ -153,7 +153,7 @@ func (p *Pipeline) inventory(ctx context.Context, scan *persistence.Scan, src So
 // archivo). El tipo real se verifica al procesar y se reclasifica si difiere.
 func classByName(rel string) string {
 	switch strings.ToLower(path.Ext(rel)) {
-	case ".pdf", ".xlsx", ".xlsm", ".png", ".jpg", ".jpeg", ".tif", ".tiff":
+	case ".pdf", ".xlsx", ".xlsm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".bmp", ".gif":
 		return ClassHeavy
 	}
 	return ClassLight

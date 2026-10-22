@@ -94,6 +94,9 @@ def main_ocr(dest: str) -> None:
         d / "foto.jpg", quality=85)
     mixed_pdf(d / "mixto.pdf")
     carnet_like(d / "carnet_ficticio.png")
+    # Imagen "descargada": WEBP con extensión .jpg (el tipo se detecta por contenido).
+    from PIL import Image
+    Image.open(d / "carnet_ficticio.png").convert("RGB").save(d / "carnet_descargado.jpg", "WEBP", quality=90)
 
 
 def carnet_like(path: Path) -> None:

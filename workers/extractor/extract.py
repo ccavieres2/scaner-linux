@@ -26,6 +26,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -85,8 +86,8 @@ class OCR:
         return self.bin is not None
 
     @staticmethod
-    def prepare(img, upscale: bool):
-        """Escala de grises, tamaño acotado y, si es chica, ampliada (letra ~30 px)."""
+    def prepare(img):
+        """Escala de grises y tamaño acotado (anti bomba de píxeles)."""
         from PIL import Image
 
         img = img.convert("L")
@@ -94,11 +95,24 @@ class OCR:
         if w * h > MAX_OCR_PIXELS:
             f = math.sqrt(MAX_OCR_PIXELS / (w * h))
             img = img.resize((max(1, int(w * f)), max(1, int(h * f))), Image.LANCZOS)
-        elif upscale and max(w, h) < MIN_OCR_SIDE:
-            # Factor entero (x2..x4): los no enteros deforman trazos finos como el guion.
-            f = min(4, max(2, round(TARGET_OCR_SIDE / max(w, h))))
-            img = img.resize((int(w * f), int(h * f)), Image.LANCZOS)
         return img
+
+    @staticmethod
+    def upscale_factor(img) -> int:
+        """Factor entero (x2..x4) para dejar la letra de una foto chica en ~30 px.
+        Los factores no enteros deforman trazos finos como el guion del DV."""
+        w, h = img.size
+        if max(w, h) >= MIN_OCR_SIDE:
+            return 1
+        return min(4, max(2, round(TARGET_OCR_SIDE / max(w, h))))
+
+    @staticmethod
+    def scale(img, f: int):
+        from PIL import Image
+
+        if f <= 1 or img.width * img.height * f * f > MAX_OCR_PIXELS:
+            return img
+        return img.resize((img.width * f, img.height * f), Image.LANCZOS)
 
     @staticmethod
     def enhance(img):
@@ -106,6 +120,13 @@ class OCR:
         from PIL import ImageFilter, ImageOps
 
         return ImageOps.autocontrast(img, cutoff=1).filter(ImageFilter.UnsharpMask(2, 150, 3))
+
+    @staticmethod
+    def binarize(img):
+        """Blanco y negro: elimina artefactos de compresión (JPEG/WEBP) alrededor de la letra."""
+        from PIL import ImageOps
+
+        return ImageOps.autocontrast(img, cutoff=1).point(lambda v: 255 if v > 128 else 0)
 
     def run(self, img, psm: int = 3):
         """Devuelve el texto reconocido, o None si tesseract falló o excedió el tiempo."""
@@ -123,24 +144,56 @@ class OCR:
         return p.stdout.decode("utf-8", "replace")
 
 
+# Cuerpo de RUT con puntos de miles, y RUT completo (guion opcional o mal leído).
+RUT_BODY = re.compile(r"\d{1,2}[.,]\d{3}[.,]\d{3}")
+RUT_FULL = re.compile(r"(\d{1,2})[.,](\d{3})[.,](\d{3})\s?[-–—+~]?\s?([\dkK])(?![\d])")
+
+
+def rut_dv(body: str) -> str:
+    s = sum(int(d) * m for d, m in zip(reversed(body), [2, 3, 4, 5, 6, 7] * 2))
+    r = 11 - s % 11
+    return {11: "0", 10: "K"}.get(r, str(r))
+
+
+def has_valid_rut(text: str) -> bool:
+    return any(rut_dv(a + b + c) == dv.upper() for a, b, c, dv in RUT_FULL.findall(text))
+
+
 def ocr_unit(ocr: OCR, img, page: int, photo: bool = False) -> None:
     """OCR de una página o imagen.
 
-    Las imágenes sueltas (fotos de carnet, capturas) usan 3 pasadas con distinto
-    preprocesamiento y segmentación: cada una falla en caracteres distintos (p. ej.
-    el guion del DV) y el detector combina los hallazgos sin duplicarlos. Las
-    páginas de PDF usan 1 pasada (son muchas y suelen ser escaneos limpios).
+    Las imágenes sueltas (fotos de carnet, capturas) se amplían y se leen en 3
+    pasadas con distinto preprocesamiento y segmentación: cada una falla en
+    caracteres distintos (p. ej. el guion o el DV) y el detector combina los
+    hallazgos sin duplicarlos. Si se ve un número de RUT pero ninguna pasada lo
+    leyó completo con DV válido, se prueban 2 variantes más (escalada): así las
+    fotos que se leen bien no pagan ese tiempo. Las páginas de PDF usan 1 pasada
+    sin ampliar (son muchas y suelen ser escaneos limpios).
     """
-    base = ocr.prepare(img, upscale=photo)
-    variants = [(ocr.enhance(base), 3), (base, 3), (base, 11)] if photo else [(base, 3)]
-    ok = False
-    for v, psm in variants:
-        text = ocr.run(v, psm)
-        if text is None:
-            continue
-        ok = True
-        if text.strip():
-            out({"t": "unit", "unit": "page", "page": page, "text": text, "method": "ocr"})
+    base = ocr.prepare(img)
+    if photo:
+        f = ocr.upscale_factor(base)
+        up = ocr.scale(base, f)
+        variants = [(ocr.enhance(up), 3), (up, 3), (up, 11)]
+        extras = [(ocr.binarize(ocr.scale(base, max(2, f - 1))), 3), (ocr.enhance(ocr.scale(base, min(4, f + 1))), 3)]
+    else:
+        variants, extras = [(base, 3)], []
+    ok, texts = False, []
+
+    def run(vs):
+        nonlocal ok
+        for v, psm in vs:
+            text = ocr.run(v, psm)
+            if text is None:
+                continue
+            ok = True
+            texts.append(text)
+            if text.strip():
+                out({"t": "unit", "unit": "page", "page": page, "text": text, "method": "ocr"})
+
+    run(variants)
+    if extras and any(RUT_BODY.search(t) for t in texts) and not any(has_valid_rut(t) for t in texts):
+        run(extras)
     if not ok:
         out({"t": "warn", "code": "ocr_failed", "page": page})
 

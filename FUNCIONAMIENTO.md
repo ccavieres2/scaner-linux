@@ -165,7 +165,20 @@ rut   7.***.**1-6  página 1   ocr     0.80       requires_review
 - **Qué se guarda:** nada. No se guarda el texto ni los valores.
 - **`--path`:** es la ruta que aparece en `./arsop.sh archivos`.
 
-**Para ver todo lo que encontró en una fuente completa,** usa `--todos` en vez de `--path`:
+**Para ver todo lo que encontró en una fuente completa,** usa `--todos` en vez de `--path`. Al final, además,
+lista los archivos **sin hallazgos** con el motivo, para que ninguno quede oculto:
+
+```
+Archivos SIN hallazgos que mostrar (2):
+  descargada.jpg    leído entero, sin RUT ni correos reconocidos (si es una foto, revise su calidad)
+  foto_celular.jpg  PENDIENTE por tamaño (>= 1048576 bytes): ejecute scan process-pending --scan <ID>
+```
+
+Las fotos de celular suelen pesar más de 1 MB, así que quedan **pendientes** hasta que ejecutes
+`./arsop.sh scan process-pending --scan <ID>`. Si quieres que se procesen en el mismo escaneo, configura
+`large_files: last` en `local/scanner.yaml`.
+
+Comando:
 ```bash
 ./arsop.sh inspect --source pruebas --todos --caso REVISION-1
 ```
@@ -189,7 +202,11 @@ Para saber en qué archivos aparece un RUT o correo en particular, usa la API (s
 - PDF con texto digital.
 
 - **Con OCR (Fase 2):**
-  - imágenes JPG, PNG y TIFF, incluidos los TIFF de varias páginas y las fotos giradas de celular;
+  - imágenes JPG, PNG, TIFF, WEBP, BMP y GIF, incluidos los TIFF de varias páginas y las fotos giradas de celular.
+    El tipo se reconoce por el contenido, no por la extensión: una imagen WEBP llamada `.jpg` (algo común en
+    imágenes descargadas) se lee igual.
+  - **No soportado aún: HEIC/HEIF**, el formato de las fotos de iPhone, aunque el archivo se llame `.jpg`. Aparece
+    como "formato no soportado (heic)". Para leerlo, conviértelo a JPG;
   - PDF escaneados;
   - PDF mixtos: una página con texto digital que además trae un escaneo pegado (una imagen que cubre al menos el 20 %
     de la página) también pasa por OCR.
@@ -200,8 +217,9 @@ Para saber en qué archivos aparece un RUT o correo en particular, usa la API (s
 - **Solo donde hace falta:** las páginas con texto digital no pasan por OCR, salvo que traigan un escaneo pegado.
 - **Fotos e imágenes sueltas (por ejemplo, fotos de carnet):** si la imagen es chica, se amplía (×2 a ×4) y se le
   sube el contraste y la nitidez. Además se lee en **3 pasadas** con distinto preprocesamiento, porque cada pasada
-  falla en caracteres distintos. Los hallazgos se combinan sin contarlos dos veces. Las páginas de PDF usan una sola
-  pasada.
+  falla en caracteres distintos. Los hallazgos se combinan sin contarlos dos veces. Si se ve un número de RUT pero
+  ninguna pasada lo leyó completo con un dígito verificador válido (lo típico con la compresión JPG/WEBP), se prueban
+  2 variantes más. Las páginas de PDF usan una sola pasada.
 - **Guion del dígito verificador:** en fotos, el guion suele leerse como `+`, `~` o una raya, o directamente se pierde
   (`80.000.0041`). En texto OCR, un RUT con puntos de miles y esos errores se acepta **solo si el dígito verificador es
   válido**, y siempre queda para revisión. En texto digital no se hace nada de esto.

@@ -80,8 +80,15 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "más de %d archivos con hallazgos; revise por archivo con --path\n", maxInspectAll)
 			return 1
 		}
-		if len(paths) == 0 {
-			fmt.Fprintln(stdout, "El último escaneo de esta fuente no encontró RUT ni correos (o aún no se escanea).")
+	}
+	var rest []persistence.FileWithoutFindings
+	if *all {
+		if rest, err = rt.Store.FilesWithoutFindings(ctx, tenant, sources[src.ID], maxInspectAll); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if len(paths) == 0 && len(rest) == 0 {
+			fmt.Fprintln(stdout, "Esta fuente aún no tiene archivos escaneados: ejecute scan start.")
 			return 0
 		}
 	}
@@ -115,7 +122,8 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if *all {
-		fmt.Fprintf(stdout, "\n%d archivos revisados, %d hallazgos", len(paths), total)
+		printWithoutFindings(stdout, rest, cfg.Scanner.LargeFileBytes)
+		fmt.Fprintf(stdout, "\n%d archivos con hallazgos revisados, %d hallazgos", len(paths), total)
 		if failed > 0 {
 			fmt.Fprintf(stdout, ", %d no se pudieron leer", failed)
 		}
@@ -193,6 +201,40 @@ func inspectOne(ctx context.Context, p *pipeline.Pipeline, root, rel string, ful
 		fmt.Fprintln(w, "cobertura: PARCIAL (parte del archivo no se pudo leer)")
 	}
 	return len(valid), true
+}
+
+// printWithoutFindings explica por qué cada archivo restante no aparece arriba.
+func printWithoutFindings(w io.Writer, rest []persistence.FileWithoutFindings, largeBytes int64) {
+	if len(rest) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "%s\nArchivos SIN hallazgos que mostrar (%d):\n", strings.Repeat("=", 60), len(rest))
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, f := range rest {
+		why := ""
+		switch {
+		case f.Deferred:
+			why = fmt.Sprintf("PENDIENTE por tamaño (>= %d bytes): ejecute scan process-pending --scan <ID>", largeBytes)
+		case f.State == "completed":
+			why = "leído entero, sin RUT ni correos reconocidos (si es una foto, revise su calidad)"
+		case f.State == "partial":
+			why = "leído en parte, sin RUT ni correos reconocidos"
+		case f.State == "skipped" && strings.HasPrefix(f.SkipReason, "unsupported_"):
+			why = "OMITIDO: formato no soportado (" + strings.TrimPrefix(f.SkipReason, "unsupported_") + ")"
+		case f.State == "skipped" || f.State == "failed":
+			reason := f.SkipReason
+			if reason == "" {
+				reason = "ver detalle con scan report --scan <ID>"
+			}
+			why = strings.ToUpper(map[string]string{"skipped": "omitido", "failed": "falló"}[f.State]) + ": " + reason
+		case f.State == "queued" || f.State == "discovered":
+			why = "aún no procesado (escaneo en curso o interrumpido: scan resume)"
+		default:
+			why = f.State
+		}
+		fmt.Fprintf(tw, "  %s\t%s\n", f.RelPath, why)
+	}
+	tw.Flush()
 }
 
 func locString(l detection.Location) string {

@@ -123,6 +123,12 @@ func TestSniff(t *testing.T) {
 		{[]byte("texto con ñ y tildes á"), "notas", KindText},
 		{[]byte("Latin1 \xf1and\xe1"), "l.txt", KindText},
 		{[]byte{0x7f, 'E', 'L', 'F', 0, 0, 1, 2}, "bin.txt", KindUnknown},
+		// Imágenes descargadas o de celular con extensión engañosa.
+		{[]byte("RIFF\x10\x00\x00\x00WEBPVP8 "), "carnet.jpg", KindImage},
+		{[]byte("GIF89a\x01\x00\x01\x00"), "a.gif", KindImage},
+		{append([]byte("BM\x00\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00\x28\x00\x00\x00"), make([]byte, 16)...), "a.bmp", KindImage},
+		{[]byte("BM es el comienzo de este texto plano bastante largo"), "notas.txt", KindText},
+		{[]byte("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic"), "IMG_0001.jpg", KindHEIC},
 	}
 	for _, c := range cases {
 		if got := Sniff(bytes.NewReader(c.data), int64(len(c.data)), c.name); got != c.want {
