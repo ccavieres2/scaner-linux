@@ -48,6 +48,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdScanPause(args[2:], stdout, stderr)
 	case "scan resume":
 		return cmdScanResume(args[2:], stdout, stderr)
+	case "inspect " + sub:
+		return cmdInspect(args[1:], stdout, stderr)
 	case "scan pending":
 		return cmdScanPending(args[2:], stdout, stderr)
 	case "scan process-pending":
@@ -142,6 +144,9 @@ func usage(w io.Writer) {
   scan pending --scan ID [--json]     lista archivos grandes diferidos (no procesados)
   scan process-pending --scan ID [--max-bytes N]
                                       procesa los diferidos (todos o solo <= N bytes)
+  inspect --source ID --path RUTA --caso REF [--completo]
+                                      vuelve a leer un archivo y muestra los RUT/emails
+                                      detectados y dónde (enmascarados; no guarda nada)
   token new                           genera un token de API y su hash SHA-256
 
 Planificados (código 3): benchmark, doctor

@@ -341,19 +341,8 @@ func (p *Pipeline) processFile(ctx context.Context, src Source, class string, t 
 	}
 	ctx, cancel := context.WithTimeout(ctx, p.FileTimeout)
 	defer cancel()
-	r := io.LimitReader(f, p.MaxBytes)
-	var res *extract.Result
-	switch kind {
-	case catalog.KindText:
-		res, err = extract.Text(r, p.Engine, p.Extract)
-	case catalog.KindCSV:
-		res, err = extract.CSV(r, p.Engine, p.Extract)
-	case catalog.KindPDF, catalog.KindXLSX:
-		res, err = p.Python.Extract(ctx, kind, r, p.Engine, p.Extract)
-	case catalog.KindImage:
-		// OCR en el worker aislado; sin tesseract: image_needs_ocr (parcial).
-		res, err = p.Python.Extract(ctx, "image", r, p.Engine, p.Extract)
-	default:
+	res, err := p.extractKind(ctx, kind, io.LimitReader(f, p.MaxBytes))
+	if errors.Is(err, ErrUnsupportedKind) {
 		return nil, kind, &fileErr{code: "unsupported_" + kind, state: "skipped"}
 	}
 	if err != nil {
@@ -377,6 +366,48 @@ func (p *Pipeline) processFile(ctx context.Context, src Source, class string, t 
 		return nil, kind, &fileErr{code: "seal_failed", state: "failed"}
 	}
 	return fr, kind, nil
+}
+
+// ErrUnsupportedKind: el tipo real del archivo no tiene extractor.
+var ErrUnsupportedKind = errors.New("formato no soportado")
+
+// extractKind elige el extractor según el tipo real del archivo.
+func (p *Pipeline) extractKind(ctx context.Context, kind string, r io.Reader) (*extract.Result, error) {
+	switch kind {
+	case catalog.KindText:
+		return extract.Text(r, p.Engine, p.Extract)
+	case catalog.KindCSV:
+		return extract.CSV(r, p.Engine, p.Extract)
+	case catalog.KindPDF, catalog.KindXLSX:
+		return p.Python.Extract(ctx, kind, r, p.Engine, p.Extract)
+	case catalog.KindImage:
+		// OCR en el worker aislado; sin tesseract: image_needs_ocr (parcial).
+		return p.Python.Extract(ctx, "image", r, p.Engine, p.Extract)
+	}
+	return nil, ErrUnsupportedKind
+}
+
+// Inspect vuelve a leer un archivo de una fuente y devuelve lo que detecta,
+// SIN guardar nada (comando `inspect`). Usa la misma apertura segura, los
+// mismos extractores y el mismo OCR que un escaneo.
+func (p *Pipeline) Inspect(ctx context.Context, root, rel string) (kind string, size int64, res *extract.Result, err error) {
+	f, err := catalog.OpenBeneath(root, rel)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return "", 0, nil, err
+	}
+	kind = catalog.Sniff(f, st.Size(), rel)
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return kind, st.Size(), nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, p.FileTimeout)
+	defer cancel()
+	res, err = p.extractKind(ctx, kind, io.LimitReader(f, p.MaxBytes))
+	return kind, st.Size(), res, err
 }
 
 // build agrupa hallazgos por identificador, calcula HMAC y cifra hojas.

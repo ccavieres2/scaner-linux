@@ -139,7 +139,28 @@ Ejemplo de `archivos`:
   `failed`, no se pudo leer; `skipped`, omitido (el motivo aparece en `motivo`, por ejemplo `encrypted`).
 - `identificadores`: cuántos RUT o emails distintos se encontraron en el archivo.
 
-Los RUT y emails están cifrados y **no se listan**. Para saber dónde aparece uno en particular, usa la API (sección 7).
+### Ver qué encontró en un archivo
+```bash
+./arsop.sh inspect --source ejemplo --path escaneados/foto.jpg --caso REVISION-1
+```
+```
+archivo: escaneados/foto.jpg (image, 45896 bytes)
+
+TIPO  VALOR        UBICACIÓN  MÉTODO  CONFIANZA  ESTADO
+rut   7.***.**1-6  página 1   ocr     0.80       requires_review
+```
+- **Cómo funciona:** vuelve a leer el archivo con los mismos extractores y el mismo OCR del escaneo, y muestra cada
+  RUT y correo con su ubicación.
+- **Por qué relee el archivo:** la base de datos guarda los RUT y correos solo como huella cifrada (HMAC), así que no
+  se pueden listar desde ahí. Releer el archivo es lo que permite mostrarlos.
+- **Valores enmascarados:** por defecto se ven así: `12.***.**8-5`, `n***@example.cl`. Para verlos enteros, agrega
+  `--completo`.
+- **`--caso` es obligatorio:** cada consulta queda en la auditoría (`audit_events`), con quién la hizo, el caso y
+  cuántos resultados hubo. Nunca se registran los valores.
+- **Qué se guarda:** nada. No se guarda el texto ni los valores.
+- **`--path`:** es la ruta que aparece en `./arsop.sh archivos`.
+
+Para saber en qué archivos aparece un RUT o correo en particular, usa la API (sección 7).
 
 ## 5. Si algo se corta
 - **Se reinició la máquina o se cortó el proceso:** ejecuta `scan resume --scan <ID>`. El escaneo sigue desde donde

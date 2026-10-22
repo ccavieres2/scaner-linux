@@ -6,6 +6,8 @@
 #   ./arsop.sh scan report  --scan ID   (y cualquier otro comando del escáner)
 #   ./arsop.sh escaneos                 lista de escaneos (fuente, estado, fecha)
 #   ./arsop.sh archivos [FUENTE]        archivos vistos: estado y cantidad de hallazgos
+#   ./arsop.sh inspect --source F --path RUTA --caso REF [--completo]
+#                                       RUT/correos detectados en un archivo y dónde
 #   ./arsop.sh estado | detener | iniciar | logs
 #   ./arsop.sh token-nuevo              reemplaza el token de la API
 #   ./arsop.sh actualizar               git pull + reconstruir + reiniciar
@@ -70,7 +72,7 @@ archivos)
     LEFT JOIN findings fi ON fi.file_version_id = v.id
     WHERE f.active AND ('$f' = '' OR s.logical_name = '$f')
     GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2;" ;;
-ayuda|-h|--help) sed -n '2,12p' "$0" ;;
+ayuda|-h|--help) sed -n '2,14p' "$0" ;;
 *)
   out=$(fuentes) || exit 1
   m=(); [ -z "$out" ] || mapfile -t m <<<"$out"
