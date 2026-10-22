@@ -45,9 +45,9 @@ if [ ! -f /etc/arsop/scanner.yaml ]; then
 schema_version: 1
 tenant: {name: "Mi organización"}
 
-# Carpetas a escanear. Ponga sus carpetas dentro de ./entrada/ (junto a compose.yaml)
-# y agregue una línea por carpeta. Ejemplo para ./entrada/rrhh:
-#   - {id: rrhh, root_path: /data/input/rrhh}
+# Carpetas a escanear: ponga la RUTA REAL de cada carpeta en este equipo (no hay que copiarla;
+# ./arsop.sh la monta en solo lectura). Ejemplo:
+#   - {id: rrhh, root_path: /srv/archivos/rrhh}
 sources:
   - {id: ejemplo, root_path: /opt/arsop/ejemplo}   # datos ficticios incluidos en la imagen
 

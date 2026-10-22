@@ -140,24 +140,27 @@ Pruébalo con los datos ficticios incluidos:
 ```
 
 ### Escanear tus carpetas
-1. Pon la carpeta dentro de `./entrada/`, por ejemplo `./entrada/rrhh`. También puedes montar ahí un recurso
-   compartido.
-2. Agrega una línea en `sources:` de `./local/scanner.yaml`:
+No hay que copiar nada: la carpeta se escanea donde está.
+
+1. Agrega la ruta real de la carpeta en `sources:` de `./local/scanner.yaml`:
    ```yaml
-     - {id: rrhh, root_path: /data/input/rrhh}
+     - {id: rrhh, root_path: /srv/archivos/rrhh}
    ```
-3. Escanea:
+2. Escanea:
    ```bash
    ./arsop.sh sources check
    ./arsop.sh scan start --source rrhh
    ./arsop.sh scan pending --scan <ID>
    ```
 
-Si los archivos están en otra ruta del host, puedes usarla en lugar de `./entrada`:
-`ARSOP_INPUT=/mnt/compartida ./arsop.sh scan start --source rrhh`.
+`./arsop.sh` monta automáticamente cada carpeta de `sources:` en **solo lectura** y con la misma ruta dentro del
+contenedor. Si la ruta no existe, avisa antes de escanear.
 
-Las carpetas se montan siempre en **solo lectura**. `./entrada` y `./local` nunca se suben a GitHub ni entran a las
-imágenes.
+- **Recursos compartidos (SMB/NFS):** también funcionan. Basta con que estén montados en el equipo, por ejemplo en
+  `/mnt/rrhh`.
+- **Rutas con espacios:** no se admiten. Usa un punto de montaje o un enlace sin espacios.
+- **Carpeta `./entrada`:** sigue disponible si prefieres dejar ahí los archivos (`root_path: /data/input/<nombre>`),
+  pero no es necesaria.
 
 ### Comandos de administración
 | Comando | Qué hace |

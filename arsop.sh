@@ -14,6 +14,21 @@ command -v docker >/dev/null || { echo "Docker no está instalado" >&2; exit 1; 
 dc() { docker compose "$@"; }
 mkdir -p entrada local
 
+# Monta (solo lectura y en la misma ruta) cada carpeta de sources: del scanner.yaml,
+# para escanearla donde está, sin copiarla. /data/input (./entrada) y la carpeta de
+# ejemplo de la imagen no necesitan montaje.
+fuentes() {
+  [ -f local/scanner.yaml ] || return 0
+  grep -v '^[[:space:]]*#' local/scanner.yaml \
+    | grep -oE 'root_path:[[:space:]]*[^,}#[:space:]]+' \
+    | sed -E "s/root_path:[[:space:]]*//; s/^[\"']//; s/[\"']\$//" | sort -u \
+    | while read -r p; do
+        case "$p" in /data/input|/data/input/*|/opt/arsop/ejemplo) continue ;; esac
+        [ -d "$p" ] || { echo "ERROR: la carpeta '$p' de scanner.yaml no existe en este equipo" >&2; exit 1; }
+        printf '%s\n' "-v" "$p:$p:ro"
+      done
+}
+
 case "${1:-ayuda}" in
 instalar)
   dc build
@@ -25,7 +40,7 @@ Listo. Pruebe con los datos de ejemplo:
   ./arsop.sh scan start --source ejemplo
   ./arsop.sh scan report --scan <ID>
 
-Sus carpetas: cópielas o móntelas en ./entrada/<nombre> y agréguelas en ./local/scanner.yaml
+Sus carpetas: agregue su ruta real en sources: de ./local/scanner.yaml (no hay que copiarlas)
 API: http://127.0.0.1:8080  (Authorization: Bearer <TOKEN>)
 EOF
   ;;
@@ -39,5 +54,8 @@ desinstalar)
   read -r -p "Se borrarán la base de datos, los hallazgos y las claves. Escriba BORRAR: " ok
   [ "$ok" = BORRAR ] && dc --profile tools down -v ;;
 ayuda|-h|--help) sed -n '2,11p' "$0" ;;
-*) dc run --rm scanner "$@" ;;
+*)
+  out=$(fuentes) || exit 1
+  m=(); [ -z "$out" ] || mapfile -t m <<<"$out"
+  MSYS_NO_PATHCONV=1 dc run --rm "${m[@]}" scanner "$@" ;;
 esac
