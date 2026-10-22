@@ -18,7 +18,7 @@ bin/scanner scan report --scan <ID> --file /etc/arsop/scanner.yaml
 bin/api --file /etc/arsop/scanner.yaml
 ```
 
-**Instalación: [INSTALACION.md](INSTALACION.md). Cómo funciona y todos los comandos: [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).** Prueba en VM: `docs/INSTALL-VM.md`. Exponer la API a un cliente (mTLS + token): `docs/API-CLIENTE.md`. Despliegue con Docker Compose: `deploy/README-deploy.md`. Contrato de API: `api/openapi.yaml`.
+**Instalación (con o sin administrador): [INSTALACION.md](INSTALACION.md). Cómo funciona y todos los comandos: [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).** Prueba en VM: `docs/INSTALL-VM.md`. Exponer la API a un cliente (mTLS + token): `docs/API-CLIENTE.md`. Despliegue con Docker Compose: `deploy/README-deploy.md`. Contrato de API: `api/openapi.yaml`.
 
 ## Documentación
 - `docs/architecture.md`, `docs/threat-model.md`, `docs/security-controls.md`

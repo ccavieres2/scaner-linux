@@ -1,9 +1,10 @@
 # Instalación del escáner
 
-Hay dos formas de instalarlo en Linux:
+Hay tres formas de instalarlo en Linux:
 
-- **A. Máquina virtual o servidor Ubuntu**, con un script automático. Es la forma recomendada para probar.
-- **B. Docker Compose.**
+- **A. Máquina virtual o servidor Ubuntu**, con un script automático. Requiere `sudo`. Es la forma recomendada para probar.
+- **B. Docker Compose.** Requiere Docker, que en la práctica equivale a permisos de administrador.
+- **C. Sin permisos de administrador**, ni `sudo` ni Docker. Todo queda en la carpeta del usuario.
 
 > Esto es una instalación de **prueba / Fase 1**. Antes de usarlo con datos reales de clientes, revisa
 > [Pendiente para producción](#pendiente-para-producción).
@@ -146,6 +147,74 @@ docker compose run --rm scanner scan start --source rrhh --file /etc/arsop/scann
 
 Con Docker, todos los comandos de [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md) se ejecutan como
 `docker compose run --rm scanner <comando> --file /etc/arsop/scanner.yaml`.
+
+---
+
+## C. Sin permisos de administrador
+
+Sirve cuando el cliente te da un usuario normal de Linux, sin `sudo` y sin Docker.
+
+> Docker no es una alternativa en este caso: usar Docker exige ser administrador o pertenecer al grupo `docker`, que
+> equivale a ser root. Docker o Podman "rootless" también necesitan que un administrador los prepare.
+
+### Qué necesita la máquina
+Linux x86_64 con `curl`, `tar`, `xz` y `python3`. Casi todas las distribuciones los traen. Si falta alguno, el
+instalador lo indica y hay que pedírselo al cliente.
+
+No necesita `git`, `make`, `python3-venv` ni PostgreSQL instalado.
+
+### Instalar
+```bash
+curl -fsSLO https://raw.githubusercontent.com/ccavieres2/scaner-linux-sin-intefaz/main/scripts/install-user.sh
+bash install-user.sh
+```
+Al final muestra el token de la API una sola vez. Luego abre una terminal nueva, para que tome el `PATH`.
+
+El instalador:
+- descarga Go y PostgreSQL 16 dentro de `~/arsop`, y verifica su checksum;
+- compila el escáner;
+- crea el entorno Python;
+- inicializa una base de datos propia, que escucha solo en `127.0.0.1:55432`;
+- genera las claves en `~/arsop/secrets` con permisos 0600;
+- crea `~/arsop/scanner.yaml`;
+- deja la API corriendo en `127.0.0.1:8080`;
+- registra el arranque automático con `crontab @reboot`.
+
+Si el cliente entrega su **propia base PostgreSQL**, define estas variables antes de instalar:
+```bash
+export ARSOP_DB_HOST=10.0.0.20 ARSOP_DB_NAME=arsop ARSOP_DB_USER=arsop_scanner ARSOP_DB_PASSWORD='...'
+bash install-user.sh
+```
+
+### Usar
+Todos los comandos de [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md) funcionan igual, sin `sudo -u arsop` y con
+`--file ~/arsop/scanner.yaml`:
+```bash
+arsop-scanner sources check --file ~/arsop/scanner.yaml
+arsop-scanner scan start --source ejemplo --file ~/arsop/scanner.yaml
+arsopctl status        # estado de PostgreSQL y la API
+arsopctl start | stop | restart
+```
+
+**Para escanear una carpeta del cliente,** agrégala en `sources:` de `~/arsop/scanner.yaml`. Tu usuario necesita
+**permiso de lectura** sobre ella. Sin administrador no se puede montar un recurso compartido (SMB) por tu cuenta: el
+cliente debe dejarlo montado, por ejemplo en `/mnt/rrhh`. Lo ideal es que tu usuario tenga **solo lectura**; si tiene
+escritura, `sources check` lo advierte con `WARNING_writable`. Aun así, el escáner abre siempre los archivos en solo
+lectura.
+
+**Para actualizar,** vuelve a ejecutar `bash install-user.sh`. No toca las claves, la configuración ni los datos.
+
+### Diferencias con la instalación con administrador
+| | Con administrador (A) | Sin administrador (C) |
+|---|---|---|
+| Usuario que ejecuta | servicio dedicado `arsop`, sin login | tu propio usuario |
+| Claves | `/etc/arsop/secrets` | `~/arsop/secrets`, legibles por tu usuario |
+| API | servicio `systemd` endurecido | proceso en segundo plano (`arsopctl`) |
+| Arranque automático | `systemd` | `crontab @reboot`, si el sistema lo permite |
+| Montar SMB | sí | no, lo hace el cliente |
+
+Para una prueba, o cuando el cliente no da más acceso, la opción C es suficiente. Para producción conviene la A, con
+un usuario de servicio separado.
 
 ---
 
