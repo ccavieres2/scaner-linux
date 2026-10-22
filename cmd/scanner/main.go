@@ -144,7 +144,7 @@ func usage(w io.Writer) {
   scan pending --scan ID [--json]     lista archivos grandes diferidos (no procesados)
   scan process-pending --scan ID [--max-bytes N]
                                       procesa los diferidos (todos o solo <= N bytes)
-  inspect --source ID --path RUTA --caso REF [--completo]
+  inspect --source ID (--path RUTA | --todos) --caso REF [--completo]
                                       vuelve a leer un archivo y muestra los RUT/emails
                                       detectados y dónde (enmascarados; no guarda nada)
   token new                           genera un token de API y su hash SHA-256

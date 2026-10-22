@@ -6,7 +6,7 @@
 #   ./arsop.sh scan report  --scan ID   (y cualquier otro comando del escáner)
 #   ./arsop.sh escaneos                 lista de escaneos (fuente, estado, fecha)
 #   ./arsop.sh archivos [FUENTE]        archivos vistos: estado y cantidad de hallazgos
-#   ./arsop.sh inspect --source F --path RUTA --caso REF [--completo]
+#   ./arsop.sh inspect --source F (--path RUTA | --todos) --caso REF [--completo]
 #                                       RUT/correos detectados en un archivo y dónde
 #   ./arsop.sh estado | detener | iniciar | logs
 #   ./arsop.sh token-nuevo              reemplaza el token de la API

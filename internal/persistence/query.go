@@ -133,6 +133,19 @@ func (s *Store) GetFile(ctx context.Context, tenant, id uuid.UUID) (*FileInfo, e
 	return &f, err
 }
 
+// FilesWithFindings devuelve las rutas de los archivos activos de una fuente cuya
+// última versión procesada tiene al menos un hallazgo (comando inspect --todos).
+func (s *Store) FilesWithFindings(ctx context.Context, tenant, source uuid.UUID, limit int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT f.relative_path FROM files f
+		WHERE f.tenant_id = $1 AND f.source_id = $2 AND f.active
+		  AND EXISTS (SELECT 1 FROM findings fi WHERE fi.file_version_id = f.last_success_version)
+		ORDER BY f.relative_path LIMIT $3`, tenant, source, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
 // Coverage describe la frescura y completitud del índice (spec §10: no
 // encontrar un dato no implica que no exista).
 type Coverage struct {

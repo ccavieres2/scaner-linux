@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,13 +22,18 @@ import (
 
 var caseRefRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// cmdInspect muestra qué detecta el escáner en UN archivo, para revisarlo a mano.
+// maxInspectAll limita --todos (cada archivo se vuelve a leer, incluido el OCR).
+const maxInspectAll = 5000
+
+// cmdInspect muestra qué detecta el escáner en un archivo (--path) o en todos los
+// archivos de la fuente con hallazgos (--todos), para revisarlo a mano.
 // La base guarda los identificadores solo como HMAC (no se pueden listar), así que
-// el archivo se vuelve a leer. No se guarda nada; la consulta queda en auditoría.
+// los archivos se vuelven a leer. No se guarda nada; la consulta queda en auditoría.
 func cmdInspect(args []string, stdout, stderr io.Writer) int {
 	f := newFlags("inspect", stderr)
 	source := f.String("source", "", "id de la fuente")
 	rel := f.String("path", "", "ruta del archivo relativa a la fuente (como en `archivos`)")
+	all := f.Bool("todos", false, "revisar todos los archivos de la fuente en los que el escaneo encontró algo")
 	caso := f.String("caso", "", "referencia del caso que justifica la consulta (auditoría)")
 	full := f.Bool("completo", false, "mostrar los valores completos (por defecto enmascarados)")
 	cfg, code := f.load(args, stderr)
@@ -40,8 +46,12 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	clean := path.Clean(strings.ReplaceAll(*rel, "\\", "/"))
-	if *rel == "" || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
-		fmt.Fprintln(stderr, "--path debe ser una ruta relativa dentro de la fuente")
+	switch {
+	case *all && *rel != "":
+		fmt.Fprintln(stderr, "use --path o --todos, no ambos")
+		return 2
+	case !*all && (*rel == "" || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../")):
+		fmt.Fprintln(stderr, "--path debe ser una ruta relativa dentro de la fuente (o use --todos)")
 		return 2
 	}
 	if !caseRefRe.MatchString(*caso) {
@@ -55,52 +65,95 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	defer rt.Close()
-	tenant, _, err := rt.EnsureCatalog(ctx)
+	tenant, sources, err := rt.EnsureCatalog(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "catálogo (¿ejecutó scanner init?):", err)
 		return 1
 	}
-	kind, size, res, err := newPipeline(rt, tenant).Inspect(ctx, src.RootPath, clean)
+	paths := []string{clean}
+	if *all {
+		if paths, err = rt.Store.FilesWithFindings(ctx, tenant, sources[src.ID], maxInspectAll+1); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if len(paths) > maxInspectAll {
+			fmt.Fprintf(stderr, "más de %d archivos con hallazgos; revise por archivo con --path\n", maxInspectAll)
+			return 1
+		}
+		if len(paths) == 0 {
+			fmt.Fprintln(stdout, "El último escaneo de esta fuente no encontró RUT ni correos (o aún no se escanea).")
+			return 0
+		}
+	}
 
-	// Auditoría (append-only): quién, qué caso y cuántos resultados; nunca los valores.
+	// Auditoría ANTES de mostrar nada (append-only): quién, qué caso y alcance; nunca los valores.
 	principal := "cli"
 	if u, e := user.Current(); e == nil {
 		principal = "cli:" + u.Username
 	}
-	n, outcome := 0, "ok"
-	if res != nil {
-		n = len(res.Findings)
-	}
-	if err != nil {
-		outcome = "error"
-	}
+	files := len(paths)
 	if aerr := rt.Store.Audit(ctx, persistence.AuditEvent{Tenant: &tenant, Principal: principal, Action: "cli_inspect",
-		Outcome: outcome, CaseReference: *caso, ResultCount: &n,
-		Details: map[string]any{"source": src.ID, "kind": kind, "full_values": *full}}); aerr != nil {
+		Outcome: "ok", CaseReference: *caso, ResultCount: &files,
+		Details: map[string]any{"source": src.ID, "all_files": *all, "full_values": *full}}); aerr != nil {
 		fmt.Fprintln(stderr, "no se pudo registrar la auditoría; no se muestran resultados")
 		return 1
 	}
 
+	p := newPipeline(rt, tenant)
+	failed, total := 0, 0
+	for i, rp := range paths {
+		if ctx.Err() != nil {
+			break
+		}
+		if i > 0 {
+			fmt.Fprintln(stdout, strings.Repeat("-", 60))
+		}
+		n, ok := inspectOne(ctx, p, src.RootPath, rp, *full, stdout)
+		total += n
+		if !ok {
+			failed++
+		}
+	}
+	if *all {
+		fmt.Fprintf(stdout, "\n%d archivos revisados, %d hallazgos", len(paths), total)
+		if failed > 0 {
+			fmt.Fprintf(stdout, ", %d no se pudieron leer", failed)
+		}
+		fmt.Fprintln(stdout, ".")
+	}
+	fmt.Fprintln(stdout, "\nNada de esto se guardó. La consulta quedó registrada en auditoría.")
+	if !*full && total > 0 {
+		fmt.Fprintln(stdout, "Valores enmascarados; use --completo para verlos enteros.")
+	}
+	if failed > 0 {
+		return 1
+	}
+	return 0
+}
+
+// inspectOne relee un archivo e imprime sus hallazgos. Devuelve cuántos hubo y si se pudo leer.
+func inspectOne(ctx context.Context, p *pipeline.Pipeline, root, rel string, full bool, w io.Writer) (int, bool) {
+	kind, size, res, err := p.Inspect(ctx, root, rel)
+	fmt.Fprintf(w, "archivo: %s (%s, %d bytes)\n", rel, kind, size)
 	var ce *extract.CodedError
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		fmt.Fprintln(stderr, "el archivo no existe en la fuente")
-		return 1
+		fmt.Fprintln(w, "  ya no existe en la fuente")
+		return 0, false
 	case errors.Is(err, catalog.ErrOutsideRoot):
-		fmt.Fprintln(stderr, "ruta fuera de la fuente o a través de un enlace simbólico")
-		return 1
+		fmt.Fprintln(w, "  ruta fuera de la fuente o a través de un enlace simbólico")
+		return 0, false
 	case errors.As(err, &ce):
-		fmt.Fprintf(stdout, "archivo: %s (%s, %d bytes)\nno se pudo leer: %s\n", clean, kind, size, ce.Code)
-		return 1
+		fmt.Fprintf(w, "  no se pudo leer: %s\n", ce.Code)
+		return 0, false
 	case errors.Is(err, pipeline.ErrUnsupportedKind):
-		fmt.Fprintf(stdout, "archivo: %s (%s, %d bytes)\nformato no soportado\n", clean, kind, size)
-		return 1
+		fmt.Fprintln(w, "  formato no soportado")
+		return 0, false
 	case err != nil:
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
+		fmt.Fprintln(w, "  no se pudo leer")
+		return 0, false
 	}
-
-	fmt.Fprintf(stdout, "archivo: %s (%s, %d bytes)\n\n", clean, kind, size)
+	fmt.Fprintln(w)
 	var valid []detection.Finding
 	invalid := 0
 	for _, fd := range res.Findings {
@@ -112,13 +165,13 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 	}
 	sort.SliceStable(valid, func(i, j int) bool { return locString(valid[i].Location) < locString(valid[j].Location) })
 	if len(valid) == 0 {
-		fmt.Fprintln(stdout, "No se detectaron RUT ni correos.")
+		fmt.Fprintln(w, "No se detectaron RUT ni correos.")
 	} else {
-		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "TIPO\tVALOR\tUBICACIÓN\tMÉTODO\tCONFIANZA\tESTADO")
 		for _, fd := range valid {
 			v := fd.Normalized
-			if !*full {
+			if !full {
 				v = mask(string(fd.Type), v)
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%.2f\t%s\n", fd.Type, v, locString(fd.Location), fd.Method, fd.Confidence, fd.Status)
@@ -126,7 +179,7 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 		tw.Flush()
 	}
 	if invalid > 0 {
-		fmt.Fprintf(stdout, "\n%d posibles RUT con dígito verificador inválido (no se indexan).\n", invalid)
+		fmt.Fprintf(w, "%d posibles RUT con dígito verificador inválido (no se indexan).\n", invalid)
 	}
 	if len(res.Warnings) > 0 {
 		keys := make([]string, 0, len(res.Warnings))
@@ -134,16 +187,12 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 			keys = append(keys, fmt.Sprintf("%s=%d", k, res.Warnings[k]))
 		}
 		sort.Strings(keys)
-		fmt.Fprintf(stdout, "\navisos: %s\n", strings.Join(keys, ", "))
+		fmt.Fprintf(w, "avisos: %s\n", strings.Join(keys, ", "))
 	}
 	if res.Partial {
-		fmt.Fprintln(stdout, "cobertura: PARCIAL (parte del archivo no se pudo leer)")
+		fmt.Fprintln(w, "cobertura: PARCIAL (parte del archivo no se pudo leer)")
 	}
-	fmt.Fprintln(stdout, "\nNada de esto se guardó. La consulta quedó registrada en auditoría.")
-	if !*full && len(valid) > 0 {
-		fmt.Fprintln(stdout, "Valores enmascarados; use --completo para verlos enteros.")
-	}
-	return 0
+	return len(valid), true
 }
 
 func locString(l detection.Location) string {

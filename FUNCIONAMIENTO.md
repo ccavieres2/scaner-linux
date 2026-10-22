@@ -160,6 +160,16 @@ rut   7.***.**1-6  página 1   ocr     0.80       requires_review
 - **Qué se guarda:** nada. No se guarda el texto ni los valores.
 - **`--path`:** es la ruta que aparece en `./arsop.sh archivos`.
 
+**Para ver todo lo que encontró en una fuente completa,** usa `--todos` en vez de `--path`:
+```bash
+./arsop.sh inspect --source pruebas --todos --caso REVISION-1
+```
+Revisa uno por uno los archivos en los que el escaneo encontró algo y al final muestra un resumen, por ejemplo
+`8 archivos revisados, 24 hallazgos`. Como relee cada archivo, incluido el OCR, puede tardar en fuentes grandes. El
+máximo es de 5000 archivos por consulta. Para guardar el resultado en un archivo:
+`./arsop.sh inspect --source pruebas --todos --caso REVISION-1 > revision.txt` (guárdalo en un lugar protegido,
+porque contiene datos personales).
+
 Para saber en qué archivos aparece un RUT o correo en particular, usa la API (sección 7).
 
 ## 5. Si algo se corta
