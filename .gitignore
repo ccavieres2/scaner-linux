@@ -12,3 +12,5 @@ deploy/config/
 entrada/*
 !entrada/LEEME.md
 local/
+__pycache__/
+*.pyc
