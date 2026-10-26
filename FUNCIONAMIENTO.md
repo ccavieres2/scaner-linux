@@ -88,6 +88,17 @@ Por ejemplo, `./arsop.sh scan start --source ejemplo`.
 | `scan pause --scan ID` | Pausa el escaneo. |
 | `scan resume --scan ID` | Retoma un escaneo pausado o cortado, por ejemplo después de reiniciar la máquina. |
 
+Al escanear desde una terminal se muestra una barra de progreso con el porcentaje, los archivos revisados del total
+y el tiempo transcurrido:
+
+```
+[#####################---------]  70%  7/10 archivos  9s  (2 pendientes por tamaño)
+```
+
+Los pendientes por tamaño (1 MB o más) no cuentan en el total: se leen después con `scan process-pending`. Las
+advertencias aparecen encima de la barra. Si la salida no es una terminal (cron, systemd, redirección a un archivo), se
+escriben los logs JSON de siempre, sin barra.
+
 ### Archivos grandes (≥ 1 MB)
 | Comando | Qué hace |
 |---|---|

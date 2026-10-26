@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -141,7 +142,17 @@ func findSource(cfg *config.Config, id string) *config.SourceConfig {
 
 func runScan(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sc *persistence.Scan, src *config.SourceConfig, sourceID uuid.UUID, stdout, stderr io.Writer) int {
 	p := newPipeline(rt, tenant)
+	var bar *progress
+	if isTerminal(stderr) {
+		// En terminal: barra de progreso; los logs INFO se omiten y las
+		// advertencias se imprimen sobre la barra sin romperla.
+		bar = startProgress(ctx, rt.Store, tenant, sc.ID, stderr)
+		p.Log = app.NewLoggerLevel(bar, slog.LevelWarn)
+	}
 	status, err := p.Run(ctx, sc, pipeline.Source{ID: sourceID, Name: src.ID, Root: src.RootPath})
+	if bar != nil {
+		bar.Stop()
+	}
 	switch {
 	case errors.Is(err, pipeline.ErrPaused):
 		fmt.Fprintf(stdout, "escaneo %s pausado; reanudar con: scanner scan resume --scan %s\n", sc.ID, sc.ID)

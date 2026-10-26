@@ -31,8 +31,12 @@ type Runtime struct {
 
 // NewLogger crea un logger JSON. Por diseño ningún llamador pasa PII; además
 // se descartan atributos con nombres que suelen contener contenido.
-func NewLogger(w io.Writer) *slog.Logger {
+func NewLogger(w io.Writer) *slog.Logger { return NewLoggerLevel(w, slog.LevelInfo) }
+
+// NewLoggerLevel es NewLogger con nivel mínimo (p. ej. Warn bajo la barra de progreso).
+func NewLoggerLevel(w io.Writer, level slog.Level) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{
+		Level: level,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			switch a.Key {
 			case "path", "relative_path", "text", "value", "rut", "email", "token", "password", "dsn":
