@@ -68,7 +68,8 @@ No hay que copiar nada: el escáner lee la carpeta donde está y solo en modo le
      - {id: pruebas, root_path: /home/kali/pruebas}
      - {id: rrhh,    root_path: /home/kali/Documentos/rrhh}   # nueva
    ```
-   - `id`: una palabra sin espacios. Es el nombre que se usa en `--source`.
+   - `id`: una palabra **en minúsculas**, sin espacios ni tildes; puede llevar números, `_` y `-` (ej. `adquisiciones`,
+     `rrhh_2024`). Es el nombre que se usa en `--source`.
    - `root_path`: ruta absoluta, que empieza con `/`.
 3. Verifique la configuración y el acceso a la carpeta:
    ```
