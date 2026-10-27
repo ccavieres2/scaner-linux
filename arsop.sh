@@ -24,7 +24,7 @@ mkdir -p entrada local
 fuentes() {
   [ -f local/scanner.yaml ] || return 0
   grep -v '^[[:space:]]*#' local/scanner.yaml \
-    | grep -oE 'root_path:[[:space:]]*[^,}#[:space:]]+' \
+    | grep -oE "root_path:[[:space:]]*(\"[^\"]*\"|'[^']*'|[^,}#\"']*[^,}#\"'[:space:]])" \
     | sed -E "s/root_path:[[:space:]]*//; s/^[\"']//; s/[\"']\$//" | sort -u \
     | while read -r p; do
         case "$p" in /data/input|/data/input/*|/opt/arsop/ejemplo) continue ;; esac

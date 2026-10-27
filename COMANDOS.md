@@ -71,6 +71,8 @@ No hay que copiar nada: el escáner lee la carpeta donde está y solo en modo le
    - `id`: una palabra **en minúsculas**, sin espacios ni tildes; puede llevar números, `_` y `-` (ej. `adquisiciones`,
      `rrhh_2024`). Es el nombre que se usa en `--source`.
    - `root_path`: ruta absoluta, que empieza con `/`.
+   - Si la ruta tiene **espacios**, va entre comillas, sin `\`:
+     `- {id: anexos_b, root_path: "/srv/archivos/Anexos B"}`
 3. Verifique la configuración y el acceso a la carpeta:
    ```
    ./arsop.sh config validate
