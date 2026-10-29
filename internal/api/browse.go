@@ -108,7 +108,7 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(list))
 	for _, f := range list {
 		m := map[string]any{"file_id": f.ID, "size_bytes": f.Size, "kind": f.Kind, "state": f.State,
-			"ruts": f.RUTs, "emails": f.Emails, "ocr": f.OCR, "deferred": f.Deferred}
+			"ruts": f.RUTs, "emails": f.Emails, "ocr": f.OCR, "deferred": f.Deferred, "reason": f.Reason}
 		if names {
 			m["display_name"] = path.Base(f.RelPath)
 			m["relative_path"] = f.RelPath

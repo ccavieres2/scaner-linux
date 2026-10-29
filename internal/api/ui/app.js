@@ -278,9 +278,50 @@ async function loadSources() {
 $("f-source").addEventListener("change", () => loadFiles(0));
 $("f-only").addEventListener("change", () => loadFiles(0));
 
+// Motivos de omisión o falla (códigos del escáner) en palabras simples.
+const REASONS = {
+  encrypted: "protegido con contraseña o cifrado",
+  corrupt: "archivo dañado o incompleto",
+  timeout: "tardó demasiado en leerse",
+  out_of_memory: "demasiado grande para la memoria asignada",
+  image_too_large: "imagen demasiado grande (más de 100 megapíxeles)",
+  zip_bomb_suspected: "contenido comprimido sospechoso",
+  temp_space_exhausted: "sin espacio temporal en el servidor",
+  extractor_failed: "error interno del lector",
+  ocr_failed: "error al leer el texto de la imagen (OCR)",
+  unsupported_format: "formato no soportado",
+  too_large: "supera el tamaño máximo configurado",
+  permission_denied: "sin permiso de lectura",
+  symlink: "acceso directo (enlace simbólico); no se sigue",
+  special_file: "no es un archivo normal",
+  other_mount: "está en otro disco o montaje",
+  outside_root: "fuera de la carpeta autorizada",
+  open_failed: "no se pudo abrir",
+  stat_failed: "no se pudo consultar el archivo",
+  seek_failed: "no se pudo leer",
+  root_unavailable: "la carpeta no estaba disponible",
+  changed_during_read: "cambió mientras se leía",
+  changed_since_inventory: "cambió durante el escaneo",
+  vanished: "se borró durante el escaneo",
+  seal_failed: "error al cifrar los resultados",
+};
+function reasonText(code) {
+  if (!code) return "";
+  if (REASONS[code]) return REASONS[code];
+  if (code.startsWith("unsupported_")) return "formato no soportado (" + code.slice(12) + ")";
+  return code;
+}
+
 function fileState(f) {
-  if (f.deferred) return el("span", { class: "chip warn" }, "pendiente por tamaño");
-  return chip(f.state);
+  if (f.deferred) {
+    return el("div", {}, el("span", { class: "chip warn" }, "pendiente por tamaño"),
+      el("div", { class: "muted small" }, "pesa 1 MB o más; se lee con scan process-pending"));
+  }
+  const why = reasonText(f.reason);
+  if (f.state === "completed" && !f.ruts && !f.emails) {
+    return el("div", {}, chip(f.state), el("div", { class: "muted small" }, "leído entero, sin RUT ni correos"));
+  }
+  return el("div", {}, chip(f.state), why ? el("div", { class: "small" }, why) : "");
 }
 
 async function loadFiles(page) {

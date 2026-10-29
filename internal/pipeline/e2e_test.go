@@ -356,6 +356,9 @@ func TestRootUnavailable(t *testing.T) {
 // scopes; sin files:names no se exponen rutas.
 func TestUIAndBrowseEndpoints(t *testing.T) {
 	e := newEnv(t, 1000)
+	// Archivos sin hallazgos: uno leído sin datos y uno dañado (falla con motivo).
+	_ = os.WriteFile(filepath.Join(e.src.Root, "vacio.txt"), []byte("sin datos personales"), 0o644)
+	_ = os.WriteFile(filepath.Join(e.src.Root, "roto.pdf"), []byte("%PDF-1.4 basura"), 0o644)
 	e.scan(t, "incremental")
 	get := func(token, path string) (int, map[string]any) {
 		req, _ := http.NewRequest("GET", e.srv.URL+path, nil)
@@ -409,6 +412,23 @@ func TestUIAndBrowseEndpoints(t *testing.T) {
 	}
 	if csv == nil || csv["ruts"].(float64) < 1 || csv["full_path"] != path.Join(e.src.Root, "clientes.csv") {
 		t.Errorf("clientes.csv sin conteo de RUT: %v", files)
+	}
+	// Sin filtro aparecen también los archivos sin hallazgos, con el motivo si se omitieron o fallaron.
+	_, all := get(e.tokens["full"], "/api/v1/sources/rrhh/files")
+	if n := len(all["files"].([]any)); n <= len(files) {
+		t.Errorf("sin filtro deben aparecer más archivos: %d <= %d", n, len(files))
+	}
+	for _, f := range all["files"].([]any) {
+		m := f.(map[string]any)
+		if (m["state"] == "skipped" || m["state"] == "failed") && m["reason"] == "" {
+			t.Errorf("archivo %v sin motivo", m["relative_path"])
+		}
+		if m["relative_path"] == "roto.pdf" && (m["state"] != "failed" || m["reason"] != "corrupt") {
+			t.Errorf("roto.pdf: %v", m)
+		}
+		if m["relative_path"] == "vacio.txt" && (m["state"] != "completed" || m["ruts"].(float64) != 0) {
+			t.Errorf("vacio.txt: %v", m)
+		}
 	}
 	if code, _ := get(e.tokens["full"], "/api/v1/sources/no-existe/files"); code != 404 {
 		t.Errorf("fuente inexistente: %d", code)

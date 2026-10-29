@@ -78,6 +78,9 @@ type SourceFile struct {
 	Emails   int
 	OCR      bool
 	Deferred bool
+	// Reason: código del motivo si fue omitido (skip_reason) o falló (último
+	// error de la tarea). Nunca contiene datos del archivo.
+	Reason string
 }
 
 // ListSourceFiles pagina (por offset, ordenado por ruta) los archivos activos
@@ -98,7 +101,13 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source st
 			count(fd.id) FILTER (WHERE i.type = 'email'),
 			COALESCE(bool_or(fd.detection_method = 'ocr'), false),
 			EXISTS (SELECT 1 FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
-			        WHERE v.file_id = f.id AND t.state = 'deferred')
+			        WHERE v.file_id = f.id AND t.state = 'deferred'),
+			COALESCE(CASE f.state
+				WHEN 'skipped' THEN f.skip_reason
+				WHEN 'failed' THEN (SELECT t.last_error_code FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
+				                    WHERE v.file_id = f.id AND t.last_error_code IS NOT NULL
+				                    ORDER BY v.observed_at DESC LIMIT 1)
+			END, '')
 		FROM files f
 		LEFT JOIN findings fd ON fd.file_version_id = f.last_success_version AND fd.status <> 'rejected_by_reviewer'
 		LEFT JOIN identifiers i ON i.id = fd.identifier_id
@@ -111,7 +120,7 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source st
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (SourceFile, error) {
 		var x SourceFile
-		err := r.Scan(&x.ID, &x.RelPath, &x.Size, &x.Kind, &x.State, &x.RUTs, &x.Emails, &x.OCR, &x.Deferred)
+		err := r.Scan(&x.ID, &x.RelPath, &x.Size, &x.Kind, &x.State, &x.RUTs, &x.Emails, &x.OCR, &x.Deferred, &x.Reason)
 		return x, err
 	})
 	return out, root, true, err
