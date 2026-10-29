@@ -54,6 +54,30 @@ Desde una terminal, el escaneo muestra una barra de progreso:
 
 > Ojo: es `./arsop.sh inspect ...`, **no** `./arsop.sh scan inspect ...`.
 
+## Interfaz web
+
+```
+./arsop.sh interfaz        # muestra cómo abrirla
+```
+
+- **En el mismo servidor:** abra `http://127.0.0.1:8080/ui/` e inicie sesión con el token de la API.
+- **Desde otro PC:** en ese PC (Windows, Mac o Linux) abra una terminal y ejecute:
+  ```
+  ssh -L 8080:127.0.0.1:8080 usuario@IP_DEL_SERVIDOR
+  ```
+  Deje esa ventana abierta y en el navegador abra `http://localhost:8080/ui/`. El túnel SSH cifra todo y pide
+  el usuario y la contraseña del servidor.
+
+| Pestaña | Qué muestra |
+|---|---|
+| Buscar | Archivos donde aparece un RUT o correo, con página, hoja, fila o línea. Pide un motivo o caso (auditoría). |
+| Resumen | Archivos indexados, archivos con hallazgos y estado por fuente. |
+| Archivos | Archivos de una fuente con su cantidad de RUT y correos, si se leyeron con OCR y su estado. |
+| Escaneos | Escaneos realizados; en "Detalle", pendientes por tamaño y errores. |
+
+La interfaz es de solo lectura. Usa la misma API, el mismo token y la misma auditoría. Los valores de RUT y correo no se
+listan porque el sistema solo guarda huellas cifradas: para saber dónde aparece uno, búsquelo.
+
 ## Agregar una carpeta nueva
 
 No hay que copiar nada: el escáner lee la carpeta donde está y solo en modo lectura.

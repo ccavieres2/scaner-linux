@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>ARSOP Escáner</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">ARSOP <span>Escáner de datos personales</span></div>
+  <div id="session" hidden>
+    <span id="who"></span>
+    <button id="logout" class="ghost">Cerrar sesión</button>
+  </div>
+</header>
+
+<main>
+  <section id="login" class="card narrow">
+    <h1>Iniciar sesión</h1>
+    <p class="muted">Ingrese el token de la API. Se guarda solo en esta pestaña y se borra al cerrarla.</p>
+    <form id="login-form">
+      <label for="token">Token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" required>
+      <button type="submit">Entrar</button>
+      <p id="login-error" class="error" hidden></p>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <nav>
+      <button data-tab="buscar" class="tab active">Buscar</button>
+      <button data-tab="resumen" class="tab">Resumen</button>
+      <button data-tab="archivos" class="tab">Archivos</button>
+      <button data-tab="escaneos" class="tab">Escaneos</button>
+    </nav>
+
+    <section id="tab-buscar" class="card">
+      <h2>Buscar un RUT o correo</h2>
+      <form id="search-form" class="grid">
+        <div>
+          <label for="s-type">Tipo</label>
+          <select id="s-type"><option value="rut">RUT</option><option value="email">Correo</option></select>
+        </div>
+        <div class="grow">
+          <label for="s-value">Valor</label>
+          <input id="s-value" autocomplete="off" spellcheck="false" placeholder="12.345.678-5 o nombre@dominio.cl" required>
+        </div>
+        <div>
+          <label for="s-case">Motivo o caso</label>
+          <input id="s-case" autocomplete="off" placeholder="SOLICITUD-123" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,63}"
+                 title="Letras, números, punto, guion o guion bajo (sin espacios)">
+        </div>
+        <div class="end"><button type="submit">Buscar</button></div>
+      </form>
+      <p class="muted small">Cada búsqueda queda registrada en la auditoría con el motivo indicado.</p>
+      <div id="search-out"></div>
+    </section>
+
+    <section id="tab-resumen" class="card" hidden>
+      <h2>Resumen</h2>
+      <div id="overview-out"></div>
+    </section>
+
+    <section id="tab-archivos" class="card" hidden>
+      <h2>Archivos por fuente</h2>
+      <form id="files-form" class="grid">
+        <div>
+          <label for="f-source">Fuente</label>
+          <select id="f-source"></select>
+        </div>
+        <div class="check"><label><input id="f-only" type="checkbox" checked> Solo con hallazgos</label></div>
+      </form>
+      <div id="files-out"></div>
+    </section>
+
+    <section id="tab-escaneos" class="card" hidden>
+      <h2>Escaneos</h2>
+      <div id="scans-out"></div>
+      <div id="scan-detail"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="muted small">Coincidencias potenciales: no acreditan la identidad del titular. Que no haya resultados no
+garantiza que no existan datos si la cobertura es parcial.</footer>
+<script src="app.js"></script>
+</body>
+</html>

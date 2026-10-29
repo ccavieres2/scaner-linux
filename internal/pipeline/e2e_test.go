@@ -350,3 +350,66 @@ func TestRootUnavailable(t *testing.T) {
 		t.Fatalf("los resultados previos deben conservarse: %d %v", code, body["result_count"])
 	}
 }
+
+// Interfaz web: archivos estáticos con CSP propia y endpoints de lectura con
+// scopes; sin files:names no se exponen rutas.
+func TestUIAndBrowseEndpoints(t *testing.T) {
+	e := newEnv(t, 1000)
+	e.scan(t, "incremental")
+	get := func(token, path string) (int, map[string]any) {
+		req, _ := http.NewRequest("GET", e.srv.URL+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		return do(t, req)
+	}
+	resp, err := http.Get(e.srv.URL + "/ui/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(page), "app.js") ||
+		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "script-src 'self'") {
+		t.Fatalf("ui: %d %q", resp.StatusCode, resp.Header.Get("Content-Security-Policy"))
+	}
+	if code, _ := get("", "/api/v1/overview"); code != 401 {
+		t.Errorf("overview sin token: %d", code)
+	}
+	code, me := get(e.tokens["scansonly"], "/api/v1/me")
+	if code != 200 || me["principal"] != "solo-scans" {
+		t.Errorf("me: %d %v", code, me)
+	}
+	if code, _ := get(e.tokens["scansonly"], "/api/v1/sources/rrhh/files"); code != 403 {
+		t.Errorf("files sin scope: %d", code)
+	}
+	code, ov := get(e.tokens["scansonly"], "/api/v1/overview")
+	srcs, _ := ov["sources"].([]any)
+	if code != 200 || len(srcs) != 1 || srcs[0].(map[string]any)["files_with_findings"].(float64) < 1 {
+		t.Fatalf("overview: %d %v", code, ov)
+	}
+	if code, sc := get(e.tokens["scansonly"], "/api/v1/scans"); code != 200 || len(sc["scans"].([]any)) != 1 {
+		t.Errorf("scans: %d %v", code, sc)
+	}
+	code, fl := get(e.tokens["full"], "/api/v1/sources/rrhh/files?with_findings=true")
+	files, _ := fl["files"].([]any)
+	if code != 200 || len(files) == 0 {
+		t.Fatalf("files: %d %v", code, fl)
+	}
+	var csv map[string]any
+	for _, f := range files {
+		m := f.(map[string]any)
+		if m["relative_path"] == "clientes.csv" {
+			csv = m
+		}
+		if m["ruts"].(float64)+m["emails"].(float64) == 0 {
+			t.Errorf("with_findings devolvió archivo sin hallazgos: %v", m)
+		}
+	}
+	if csv == nil || csv["ruts"].(float64) < 1 {
+		t.Errorf("clientes.csv sin conteo de RUT: %v", files)
+	}
+	if code, _ := get(e.tokens["full"], "/api/v1/sources/no-existe/files"); code != 404 {
+		t.Errorf("fuente inexistente: %d", code)
+	}
+}

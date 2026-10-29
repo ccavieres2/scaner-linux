@@ -8,6 +8,7 @@
 #   ./arsop.sh archivos [FUENTE]        archivos vistos: estado y cantidad de hallazgos
 #   ./arsop.sh inspect --source F (--path RUTA | --todos) --caso REF [--completo]
 #                                       RUT/correos detectados en un archivo y dónde
+#   ./arsop.sh interfaz                 cómo abrir la interfaz web (en este equipo o desde otro PC)
 #   ./arsop.sh estado | detener | iniciar | logs
 #   ./arsop.sh token-nuevo              reemplaza el token de la API
 #   ./arsop.sh actualizar               git pull + reconstruir + reiniciar
@@ -57,6 +58,21 @@ actualizar)  git pull --ff-only && dc build && dc up -d ;;
 desinstalar)
   read -r -p "Se borrarán la base de datos, los hallazgos y las claves. Escriba BORRAR: " ok
   [ "$ok" = BORRAR ] && dc --profile tools down -v ;;
+interfaz)
+  ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true); ip=${ip:-IP_DEL_SERVIDOR}
+  cat <<FIN
+Interfaz web (inicie sesión con el token de la API):
+
+  En este equipo:   http://127.0.0.1:8080/ui/
+
+  Desde otro PC, abra un túnel SSH cifrado y deje esa ventana abierta:
+      ssh -L 8080:127.0.0.1:8080 $(id -un)@$ip
+  y luego, en el navegador de ese PC:  http://localhost:8080/ui/
+
+Por seguridad la interfaz no se publica en la red sin cifrado: el túnel SSH
+usa el usuario y la contraseña (o llave) de este servidor.
+FIN
+  ;;
 escaneos)
   dc exec -T postgres psql -U arsop_scanner -d arsop -c "SELECT s.logical_name AS fuente, sc.id AS escaneo,
     sc.status AS estado, sc.started_at::timestamp(0) AS inicio FROM scans sc JOIN sources s ON s.id = sc.source_id

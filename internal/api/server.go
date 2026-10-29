@@ -78,8 +78,16 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	r.Get("/api/v1/health/ready", s.ready)
+	// Interfaz web: archivos estáticos sin datos; todo dato pasa por la API autenticada.
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/ui/", http.StatusFound) })
+	r.Get("/ui", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/ui/", http.StatusFound) })
+	r.Get("/ui/*", s.uiHandler().ServeHTTP)
 	r.Group(func(r chi.Router) {
 		r.Use(s.authenticate)
+		r.Get("/api/v1/me", s.me)
+		r.Get("/api/v1/overview", s.require(ScopeScans, s.overview))
+		r.Get("/api/v1/scans", s.require(ScopeScans, s.listScans))
+		r.Get("/api/v1/sources/{name}/files", s.require(ScopeFiles, s.sourceFiles))
 		r.Post("/api/v1/identifiers/search", s.require(ScopeSearch, s.search))
 		r.Get("/api/v1/files/{id}", s.require(ScopeFiles, s.getFile))
 		r.Get("/api/v1/scans/{id}", s.require(ScopeScans, s.getScan))
