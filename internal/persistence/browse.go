@@ -81,15 +81,17 @@ type SourceFile struct {
 }
 
 // ListSourceFiles pagina (por offset, ordenado por ruta) los archivos activos
-// de una fuente. ok=false si la fuente no existe.
-func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source string, onlyFindings bool, offset, limit int) ([]SourceFile, bool, error) {
+// de una fuente y devuelve también la raíz de la fuente. ok=false si la
+// fuente no existe.
+func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source string, onlyFindings bool, offset, limit int) ([]SourceFile, string, bool, error) {
 	var sid uuid.UUID
-	err := s.pool.QueryRow(ctx, `SELECT id FROM sources WHERE tenant_id = $1 AND logical_name = $2`, tenant, source).Scan(&sid)
+	var root string
+	err := s.pool.QueryRow(ctx, `SELECT id, root_path FROM sources WHERE tenant_id = $1 AND logical_name = $2`, tenant, source).Scan(&sid, &root)
 	if err == pgx.ErrNoRows {
-		return nil, false, nil
+		return nil, "", false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT f.id, f.relative_path, f.size_bytes, f.mime_type, f.state,
 			count(fd.id) FILTER (WHERE i.type = 'rut'),
@@ -105,12 +107,12 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source st
 		HAVING NOT $3 OR count(fd.id) > 0
 		ORDER BY f.relative_path OFFSET $4 LIMIT $5`, tenant, sid, onlyFindings, offset, limit)
 	if err != nil {
-		return nil, true, err
+		return nil, root, true, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (SourceFile, error) {
 		var x SourceFile
 		err := r.Scan(&x.ID, &x.RelPath, &x.Size, &x.Kind, &x.State, &x.RUTs, &x.Emails, &x.OCR, &x.Deferred)
 		return x, err
 	})
-	return out, true, err
+	return out, root, true, err
 }

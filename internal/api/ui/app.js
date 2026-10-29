@@ -86,6 +86,21 @@ function table(headers, rows) {
 
 function show(node, ...children) { node.replaceChildren(...children); }
 
+// Ruta completa en el servidor: nombre del archivo destacado, carpeta debajo y botón para copiarla.
+function pathCell(full, source) {
+  const i = full.lastIndexOf("/");
+  const copy = el("button", { class: "link small", title: "Copiar la ruta completa" }, "copiar ruta");
+  copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(full); copy.textContent = "copiada"; }
+    catch (_) { copy.textContent = "seleccione y copie"; }
+    setTimeout(() => { copy.textContent = "copiar ruta"; }, 1500);
+  });
+  return el("div", {},
+    el("div", {}, el("b", {}, full.slice(i + 1))),
+    el("div", { class: "muted small" }, (source ? "[" + source + "]  " : "") + full.slice(0, i + 1)),
+    copy);
+}
+
 // ---- sesión ----
 
 async function login(t) {
@@ -182,14 +197,13 @@ async function runSearch(cursor, append) {
       method: "POST", body: JSON.stringify({ ...lastSearch, page_size: 50, ...(cursor ? { cursor } : {}) }),
     });
     const rows = r.results.map((x) => el("tr", {},
-      el("td", { class: "path" }, x.display_name || el("span", { class: "muted" }, "[nombre oculto]"),
-        el("div", { class: "muted small" }, "id " + x.file_id)),
+      el("td", { class: "path" }, x.full_path ? pathCell(x.full_path, x.source) : el("span", { class: "muted" }, "[ruta oculta] " + x.file_id)),
       el("td", {}, x.locations.map(fmtLocation).filter(Boolean).join(" · ") || "—"),
       el("td", { class: "num" }, x.occurrences),
       el("td", {}, x.method === "ocr" ? "OCR" : "texto"),
       el("td", {}, chip(x.review_status)),
       el("td", {}, fmtDate(x.processed_at))));
-    const t = table(["Archivo", "Ubicación", { label: "Veces", num: true }, "Método", "Estado", "Leído"], rows);
+    const t = table(["Archivo y carpeta", "Ubicación", { label: "Veces", num: true }, "Método", "Estado", "Leído"], rows);
     const header = el("div", {},
       el("p", {}, el("b", {}, r.result_count), r.result_count === 1 ? " archivo contiene este valor." : " archivos contienen este valor."),
       el("div", { class: "notice" }, "Cobertura: ", chip(r.coverage.scan_status),
@@ -279,7 +293,7 @@ async function loadFiles(page) {
     const q = new URLSearchParams({ page: String(page), with_findings: String($("f-only").checked) });
     const r = await api("/api/v1/sources/" + encodeURIComponent(src) + "/files?" + q);
     const rows = r.files.map((f) => el("tr", {},
-      el("td", { class: "path" }, f.relative_path || el("span", { class: "muted" }, "[nombre oculto] " + f.file_id)),
+      el("td", { class: "path" }, f.full_path ? pathCell(f.full_path) : el("span", { class: "muted" }, "[ruta oculta] " + f.file_id)),
       el("td", {}, f.kind || "—"),
       el("td", { class: "num" }, fmtSize(f.size_bytes)),
       el("td", { class: "num" }, f.ruts),
@@ -292,7 +306,7 @@ async function loadFiles(page) {
       el("button", { class: "ghost", onclick: () => loadFiles(filesPage + 1), ...(r.has_more ? {} : { disabled: "" }) }, "Siguiente"));
     show(out,
       el("p", { class: "muted small" }, "Los valores no se muestran aquí: el sistema guarda solo huellas. Para saber dónde aparece un RUT o correo, use Buscar."),
-      r.files.length ? table(["Archivo", "Tipo", { label: "Tamaño", num: true }, { label: "RUT", num: true },
+      r.files.length ? table(["Archivo y carpeta", "Tipo", { label: "Tamaño", num: true }, { label: "RUT", num: true },
         { label: "Correos", num: true }, "", "Estado"], rows) : el("p", { class: "muted" }, "Sin archivos que mostrar."),
       pager);
   } catch (e) {

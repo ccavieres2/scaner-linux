@@ -24,6 +24,8 @@ type SearchResult struct {
 	FileID        uuid.UUID
 	FileVersionID uuid.UUID
 	RelPath       string
+	SourceName    string
+	RootPath      string
 	VersionState  string
 	ProcessedAt   *time.Time
 	Status        string
@@ -45,12 +47,13 @@ func (s *Store) Search(ctx context.Context, tenant uuid.UUID, typ string, tokens
 		  AND fd.status <> 'rejected_by_reviewer'`, tenant, typ, tokens).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT f.id, fv.id, f.relative_path, fv.state, fv.processed_at, fd.id, fd.status,
-			fd.detection_method, fd.confidence, fd.occurrences
+	rows, err := s.pool.Query(ctx, `SELECT f.id, fv.id, f.relative_path, src.logical_name, src.root_path, fv.state,
+			fv.processed_at, fd.id, fd.status, fd.detection_method, fd.confidence, fd.occurrences
 		FROM identifiers i
 		JOIN findings fd ON fd.identifier_id = i.id AND fd.tenant_id = i.tenant_id
 		JOIN file_versions fv ON fv.id = fd.file_version_id
 		JOIN files f ON f.last_success_version = fv.id AND f.tenant_id = i.tenant_id AND f.active
+		JOIN sources src ON src.id = f.source_id
 		WHERE i.tenant_id = $1 AND i.type = $2 AND i.lookup_hmac = ANY($3) AND f.id > $4
 		  AND fd.status <> 'rejected_by_reviewer'
 		ORDER BY f.id
@@ -64,8 +67,8 @@ func (s *Store) Search(ctx context.Context, tenant uuid.UUID, typ string, tokens
 		var r SearchResult
 		var fid uuid.UUID
 		var conf float32
-		if err := rows.Scan(&r.FileID, &r.FileVersionID, &r.RelPath, &r.VersionState, &r.ProcessedAt, &fid, &r.Status,
-			&r.Method, &conf, &r.Occurrences); err != nil {
+		if err := rows.Scan(&r.FileID, &r.FileVersionID, &r.RelPath, &r.SourceName, &r.RootPath, &r.VersionState,
+			&r.ProcessedAt, &fid, &r.Status, &r.Method, &conf, &r.Occurrences); err != nil {
 			rows.Close()
 			return nil, 0, err
 		}
@@ -110,6 +113,7 @@ func (s *Store) Search(ctx context.Context, tenant uuid.UUID, typ string, tokens
 type FileInfo struct {
 	ID           uuid.UUID
 	SourceName   string
+	RootPath     string
 	RelPath      string
 	SizeBytes    int64
 	MimeKind     *string
@@ -121,12 +125,12 @@ type FileInfo struct {
 
 func (s *Store) GetFile(ctx context.Context, tenant, id uuid.UUID) (*FileInfo, error) {
 	var f FileInfo
-	err := s.pool.QueryRow(ctx, `SELECT f.id, src.logical_name, f.relative_path, f.size_bytes, f.mime_type, f.state, f.skip_reason,
+	err := s.pool.QueryRow(ctx, `SELECT f.id, src.logical_name, src.root_path, f.relative_path, f.size_bytes, f.mime_type, f.state, f.skip_reason,
 			f.last_observed_at, fv.processed_at
 		FROM files f JOIN sources src ON src.id = f.source_id
 		LEFT JOIN file_versions fv ON fv.id = f.last_success_version
 		WHERE f.id = $1 AND f.tenant_id = $2`, id, tenant).Scan(
-		&f.ID, &f.SourceName, &f.RelPath, &f.SizeBytes, &f.MimeKind, &f.State, &f.SkipReason, &f.LastObserved, &f.ProcessedAt)
+		&f.ID, &f.SourceName, &f.RootPath, &f.RelPath, &f.SizeBytes, &f.MimeKind, &f.State, &f.SkipReason, &f.LastObserved, &f.ProcessedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

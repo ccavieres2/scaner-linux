@@ -91,7 +91,7 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	size := s.opt.MaxPageSize
 	only := r.URL.Query().Get("with_findings") == "true"
-	list, ok, err := s.store.ListSourceFiles(r.Context(), s.tenant, name, only, page*size, size+1)
+	list, root, ok, err := s.store.ListSourceFiles(r.Context(), s.tenant, name, only, page*size, size+1)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -112,6 +112,7 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 		if names {
 			m["display_name"] = path.Base(f.RelPath)
 			m["relative_path"] = f.RelPath
+			m["full_path"] = path.Join(root, f.RelPath)
 		}
 		out = append(out, m)
 	}

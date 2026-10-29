@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -406,7 +407,7 @@ func TestUIAndBrowseEndpoints(t *testing.T) {
 			t.Errorf("with_findings devolvió archivo sin hallazgos: %v", m)
 		}
 	}
-	if csv == nil || csv["ruts"].(float64) < 1 {
+	if csv == nil || csv["ruts"].(float64) < 1 || csv["full_path"] != path.Join(e.src.Root, "clientes.csv") {
 		t.Errorf("clientes.csv sin conteo de RUT: %v", files)
 	}
 	if code, _ := get(e.tokens["full"], "/api/v1/sources/no-existe/files"); code != 404 {

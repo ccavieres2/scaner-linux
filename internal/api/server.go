@@ -183,8 +183,12 @@ type locationOut struct {
 }
 
 type resultOut struct {
-	FileID       string        `json:"file_id"`
-	DisplayName  string        `json:"display_name,omitempty"`
+	FileID      string `json:"file_id"`
+	DisplayName string `json:"display_name,omitempty"`
+	// Source, RelativePath y FullPath (raíz de la fuente + ruta) solo con files:names.
+	Source       string        `json:"source,omitempty"`
+	RelativePath string        `json:"relative_path,omitempty"`
+	FullPath     string        `json:"full_path,omitempty"`
 	Locations    []locationOut `json:"locations"`
 	Occurrences  int           `json:"occurrences"`
 	Method       string        `json:"method"`
@@ -269,6 +273,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			ProcessedAt: row.ProcessedAt, Locations: []locationOut{}}
 		if names {
 			ro.DisplayName = path.Base(row.RelPath)
+			ro.Source, ro.RelativePath, ro.FullPath = row.SourceName, row.RelPath, path.Join(row.RootPath, row.RelPath)
 		}
 		for _, l := range row.Locations {
 			lo := locationOut{Page: l.Page, Row: l.Row, Column: l.Column, Line: l.Line}
@@ -369,6 +374,7 @@ func (s *Server) getFile(w http.ResponseWriter, r *http.Request) {
 	if p.Has(ScopeNames) {
 		out["display_name"] = path.Base(f.RelPath)
 		out["relative_path"] = f.RelPath
+		out["full_path"] = path.Join(f.RootPath, f.RelPath)
 	}
 	s.audit(r, p, "files.read", "ok", "", nil)
 	writeJSON(w, http.StatusOK, out)
