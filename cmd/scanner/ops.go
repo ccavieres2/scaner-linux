@@ -173,32 +173,56 @@ func runScan(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sc *persist
 	return 0
 }
 
+// selectSources resuelve qué fuentes escanear. Todo se valida antes de empezar:
+// un nombre inválido no deja ningún escaneo a medias.
+func selectSources(cfg *config.Config, names []string, all bool) ([]*config.SourceConfig, error) {
+	var srcs []*config.SourceConfig
+	if all {
+		if len(names) > 0 {
+			return nil, errors.New("use --all o --source, no ambos")
+		}
+		for i := range cfg.Sources {
+			if *cfg.Sources[i].Enabled {
+				srcs = append(srcs, &cfg.Sources[i])
+			}
+		}
+		if len(srcs) == 0 {
+			return nil, errors.New("--all: no hay fuentes habilitadas")
+		}
+		return srcs, nil
+	}
+	if len(names) == 0 {
+		return nil, errors.New("indique --source con una fuente configurada y habilitada, o --all")
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		src := findSource(cfg, n)
+		if src == nil || !*src.Enabled {
+			return nil, fmt.Errorf("--source: %q no es una fuente configurada y habilitada", n)
+		}
+		if !seen[n] {
+			seen[n] = true
+			srcs = append(srcs, src)
+		}
+	}
+	return srcs, nil
+}
+
 func cmdScanStart(args []string, stdout, stderr io.Writer) int {
 	f := newFlags("scan start", stderr)
 	source := f.String("source", "", "id de la fuente autorizada; varias separadas por coma (se escanean en orden)")
 	full := f.Bool("full", false, "reprocesar todo aunque no haya cambios")
+	all := f.Bool("all", false, "todas las fuentes habilitadas del archivo de configuración, en su orden")
 	cfg, code := f.load(args, stderr)
 	if cfg == nil {
 		return code
 	}
 	// Acepta "a,b,c", "a, b, c" y "a b c" (los argumentos sueltos tras --source).
 	names := strings.FieldsFunc(*source+" "+strings.Join(f.Args(), " "), func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
-	if len(names) == 0 {
-		fmt.Fprintln(stderr, "--source debe ser una fuente configurada y habilitada")
+	srcs, err := selectSources(cfg, names, *all)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 2
-	}
-	var srcs []*config.SourceConfig
-	seen := map[string]bool{}
-	for _, n := range names {
-		src := findSource(cfg, n)
-		if src == nil || !*src.Enabled {
-			fmt.Fprintf(stderr, "--source: %q no es una fuente configurada y habilitada\n", n)
-			return 2
-		}
-		if !seen[n] {
-			seen[n] = true
-			srcs = append(srcs, src)
-		}
 	}
 	ctx, cancel := signalContext()
 	defer cancel()

@@ -3,6 +3,7 @@
 #
 #   ./arsop.sh instalar                 construye, crea claves y levanta todo (muestra el token)
 #   ./arsop.sh scan start --source ejemplo
+#   ./arsop.sh scan start --all         todas las carpetas del yaml (solo lo nuevo o modificado)
 #   ./arsop.sh scan report  --scan ID   (y cualquier otro comando del escáner)
 #   ./arsop.sh escaneos                 lista de escaneos (fuente, estado, fecha)
 #   ./arsop.sh archivos [FUENTE]        archivos vistos: estado y cantidad de hallazgos
@@ -88,7 +89,7 @@ archivos)
     LEFT JOIN findings fi ON fi.file_version_id = v.id
     WHERE f.active AND ('$f' = '' OR s.logical_name = '$f')
     GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2;" ;;
-ayuda|-h|--help) sed -n '2,14p' "$0" ;;
+ayuda|-h|--help) sed -n '2,15p' "$0" ;;
 *)
   out=$(fuentes) || exit 1
   m=(); [ -z "$out" ] || mapfile -t m <<<"$out"
