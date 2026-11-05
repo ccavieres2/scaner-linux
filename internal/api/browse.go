@@ -90,8 +90,17 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	size := s.opt.MaxPageSize
-	only := r.URL.Query().Get("with_findings") == "true"
-	list, root, ok, err := s.store.ListSourceFiles(r.Context(), s.tenant, name, only, page*size, size+1)
+	filter := r.URL.Query().Get("filter")
+	switch filter {
+	case "", "findings", "scanned", "pending", "problems":
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_filter")
+		return
+	}
+	if filter == "" && r.URL.Query().Get("with_findings") == "true" {
+		filter = "findings"
+	}
+	list, root, ok, err := s.store.ListSourceFiles(r.Context(), s.tenant, name, filter, page*size, size+1)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -99,6 +108,17 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
+	}
+	sums, err := s.store.SourceSummaries(r.Context(), s.tenant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	var totals any
+	for _, x := range sums {
+		if x.Name == name {
+			totals = x
+		}
 	}
 	more := len(list) > size
 	if more {
@@ -118,5 +138,5 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	n := len(out)
 	s.audit(r, p, "files.list", "ok", "", &n)
-	writeJSON(w, http.StatusOK, map[string]any{"source": name, "page": page, "has_more": more, "files": out})
+	writeJSON(w, http.StatusOK, map[string]any{"source": name, "page": page, "has_more": more, "totals": totals, "files": out})
 }

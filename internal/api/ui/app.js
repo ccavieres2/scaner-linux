@@ -231,15 +231,19 @@ async function loadOverview() {
   try {
     const r = await api("/api/v1/overview");
     const c = r.coverage;
-    const tot = r.sources.reduce((a, s) => ({ files: a.files + s.files, with: a.with + s.files_with_findings }), { files: 0, with: 0 });
+    const tot = r.sources.reduce((a, s) => ({ files: a.files + s.files, scanned: a.scanned + s.files_scanned, pending: a.pending + s.files_pending, with: a.with + s.files_with_findings }), { files: 0, scanned: 0, pending: 0, with: 0 });
     const stats = el("div", { class: "stats" },
-      el("div", { class: "stat" }, el("b", {}, tot.files), "archivos indexados"),
+      el("div", { class: "stat" }, el("b", {}, tot.files), "archivos encontrados"),
+      el("div", { class: "stat" }, el("b", {}, tot.scanned), "escaneados"),
+      el("div", { class: "stat" }, el("b", {}, tot.pending), "pendientes por tamaño"),
       el("div", { class: "stat" }, el("b", {}, tot.with), "archivos con RUT o correos"),
       el("div", { class: "stat" }, el("b", {}, c.sources_scanned + " / " + c.sources_total), "fuentes escaneadas"),
       el("div", { class: "stat" }, el("b", {}, c.files_not_covered), "archivos sin cubrir por completo"));
     const rows = r.sources.map((s) => el("tr", {},
       el("td", {}, s.source, s.enabled ? "" : el("span", { class: "muted small" }, " (deshabilitada)")),
       el("td", { class: "num" }, s.files),
+      el("td", { class: "num" }, s.files_scanned),
+      el("td", { class: "num" }, s.files_pending),
       el("td", { class: "num" }, s.files_with_findings),
       el("td", { class: "num" }, s.files_partial),
       el("td", { class: "num" }, s.files_failed),
@@ -249,7 +253,7 @@ async function loadOverview() {
       el("div", { class: "notice" }, "Estado general: ", chip(c.scan_status)),
       stats,
       el("h3", {}, "Fuentes"),
-      table(["Fuente", { label: "Archivos", num: true }, { label: "Con hallazgos", num: true }, { label: "Parciales", num: true },
+      table(["Fuente", { label: "Encontrados", num: true }, { label: "Escaneados", num: true }, { label: "Pendientes", num: true }, { label: "Con hallazgos", num: true }, { label: "Parciales", num: true },
         { label: "Fallidos", num: true }, { label: "Omitidos", num: true }, "Último escaneo"], rows));
   } catch (e) {
     show(out, el("p", { class: "error" }, message(e)));
@@ -276,7 +280,7 @@ async function loadSources() {
   }
 }
 $("f-source").addEventListener("change", () => loadFiles(0));
-$("f-only").addEventListener("change", () => loadFiles(0));
+$("f-filter").addEventListener("change", () => loadFiles(0));
 
 // Motivos de omisión o falla (códigos del escáner) en palabras simples.
 const REASONS = {
@@ -331,7 +335,7 @@ async function loadFiles(page) {
   filesPage = page;
   show(out, el("p", { class: "muted" }, "Cargando…"));
   try {
-    const q = new URLSearchParams({ page: String(page), with_findings: String($("f-only").checked) });
+    const q = new URLSearchParams({ page: String(page), filter: $("f-filter").value });
     const r = await api("/api/v1/sources/" + encodeURIComponent(src) + "/files?" + q);
     const rows = r.files.map((f) => el("tr", {},
       el("td", { class: "path" }, f.full_path ? pathCell(f.full_path) : el("span", { class: "muted" }, "[ruta oculta] " + f.file_id)),
@@ -345,7 +349,10 @@ async function loadFiles(page) {
       el("button", { class: "ghost", onclick: () => loadFiles(filesPage - 1), ...(page === 0 ? { disabled: "" } : {}) }, "Anterior"),
       el("span", { class: "muted small" }, "Página " + (page + 1)),
       el("button", { class: "ghost", onclick: () => loadFiles(filesPage + 1), ...(r.has_more ? {} : { disabled: "" }) }, "Siguiente"));
+    const n = r.totals;
     show(out,
+      n ? el("p", {}, "Encontrados: " + n.files + " · Escaneados: " + n.files_scanned + " · Pendientes por tamaño: " + n.files_pending +
+        " · Omitidos: " + n.files_skipped + " · Fallidos: " + n.files_failed) : "",
       el("p", { class: "muted small" }, "Los valores no se muestran aquí: el sistema guarda solo huellas. Para saber dónde aparece un RUT o correo, use Buscar."),
       r.files.length ? table(["Archivo y carpeta", "Tipo", { label: "Tamaño", num: true }, { label: "RUT", num: true },
         { label: "Correos", num: true }, "", "Estado"], rows) : el("p", { class: "muted" }, "Sin archivos que mostrar."),

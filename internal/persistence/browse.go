@@ -35,10 +35,19 @@ func (s *Store) ListScans(ctx context.Context, tenant uuid.UUID, limit int) ([]S
 	})
 }
 
+// pendingSQL: el archivo espera lectura por tamaño (scan process-pending).
+const pendingSQL = `EXISTS (SELECT 1 FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
+	WHERE v.file_id = f.id AND t.state = 'deferred')`
+
+// scannedSQL: el archivo fue leído (entero o en parte) y no espera otra lectura.
+const scannedSQL = `f.state IN ('completed','partial') AND NOT ` + pendingSQL
+
 type SourceSummary struct {
 	Name         string     `json:"source"`
 	Enabled      bool       `json:"enabled"`
 	Files        int        `json:"files"`
+	Scanned      int        `json:"files_scanned"`
+	Pending      int        `json:"files_pending"`
 	WithFindings int        `json:"files_with_findings"`
 	Partial      int        `json:"files_partial"`
 	Failed       int        `json:"files_failed"`
@@ -49,6 +58,8 @@ type SourceSummary struct {
 func (s *Store) SourceSummaries(ctx context.Context, tenant uuid.UUID) ([]SourceSummary, error) {
 	rows, err := s.pool.Query(ctx, `SELECT src.logical_name, src.enabled,
 			count(f.id),
+			count(f.id) FILTER (WHERE `+scannedSQL+`),
+			count(f.id) FILTER (WHERE `+pendingSQL+`),
 			count(f.id) FILTER (WHERE EXISTS (SELECT 1 FROM findings fi
 				WHERE fi.file_version_id = f.last_success_version AND fi.status <> 'rejected_by_reviewer')),
 			count(f.id) FILTER (WHERE f.state = 'partial'),
@@ -63,7 +74,7 @@ func (s *Store) SourceSummaries(ctx context.Context, tenant uuid.UUID) ([]Source
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (SourceSummary, error) {
 		var x SourceSummary
-		err := r.Scan(&x.Name, &x.Enabled, &x.Files, &x.WithFindings, &x.Partial, &x.Failed, &x.Skipped, &x.LastScanAt)
+		err := r.Scan(&x.Name, &x.Enabled, &x.Files, &x.Scanned, &x.Pending, &x.WithFindings, &x.Partial, &x.Failed, &x.Skipped, &x.LastScanAt)
 		return x, err
 	})
 }
@@ -85,8 +96,9 @@ type SourceFile struct {
 
 // ListSourceFiles pagina (por offset, ordenado por ruta) los archivos activos
 // de una fuente y devuelve también la raíz de la fuente. ok=false si la
-// fuente no existe.
-func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source string, onlyFindings bool, offset, limit int) ([]SourceFile, string, bool, error) {
+// fuente no existe. filter: "" (todos), findings, scanned, pending o problems
+// (omitidos y fallidos).
+func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source, filter string, offset, limit int) ([]SourceFile, string, bool, error) {
 	var sid uuid.UUID
 	var root string
 	err := s.pool.QueryRow(ctx, `SELECT id, root_path FROM sources WHERE tenant_id = $1 AND logical_name = $2`, tenant, source).Scan(&sid, &root)
@@ -100,8 +112,7 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source st
 			count(fd.id) FILTER (WHERE i.type = 'rut'),
 			count(fd.id) FILTER (WHERE i.type = 'email'),
 			COALESCE(bool_or(fd.detection_method = 'ocr'), false),
-			EXISTS (SELECT 1 FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
-			        WHERE v.file_id = f.id AND t.state = 'deferred'),
+			`+pendingSQL+`,
 			COALESCE(CASE f.state
 				WHEN 'skipped' THEN f.skip_reason
 				WHEN 'failed' THEN (SELECT t.last_error_code FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
@@ -113,8 +124,13 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source st
 		LEFT JOIN identifiers i ON i.id = fd.identifier_id
 		WHERE f.tenant_id = $1 AND f.source_id = $2 AND f.active
 		GROUP BY f.id
-		HAVING NOT $3 OR count(fd.id) > 0
-		ORDER BY f.relative_path OFFSET $4 LIMIT $5`, tenant, sid, onlyFindings, offset, limit)
+		HAVING CASE $3::text
+			WHEN 'findings' THEN count(fd.id) > 0
+			WHEN 'scanned' THEN `+scannedSQL+`
+			WHEN 'pending' THEN `+pendingSQL+`
+			WHEN 'problems' THEN f.state IN ('failed','skipped')
+			ELSE true END
+		ORDER BY f.relative_path OFFSET $4 LIMIT $5`, tenant, sid, filter, offset, limit)
 	if err != nil {
 		return nil, root, true, err
 	}

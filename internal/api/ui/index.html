@@ -71,7 +71,16 @@
           <label for="f-source">Fuente</label>
           <select id="f-source"></select>
         </div>
-        <div class="check"><label><input id="f-only" type="checkbox" checked> Solo con hallazgos</label></div>
+        <div>
+          <label for="f-filter">Mostrar</label>
+          <select id="f-filter">
+            <option value="">Todos los encontrados</option>
+            <option value="scanned">Escaneados</option>
+            <option value="findings">Con hallazgos</option>
+            <option value="pending">Pendientes por tamaño</option>
+            <option value="problems">Omitidos o fallidos</option>
+          </select>
+        </div>
       </form>
       <div id="files-out"></div>
     </section>

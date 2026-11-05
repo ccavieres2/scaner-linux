@@ -430,6 +430,20 @@ func TestUIAndBrowseEndpoints(t *testing.T) {
 			t.Errorf("vacio.txt: %v", m)
 		}
 	}
+	// Filtros y totales: encontrados, escaneados, pendientes y problemas.
+	_, sc := get(e.tokens["full"], "/api/v1/sources/rrhh/files?filter=scanned")
+	_, pe := get(e.tokens["full"], "/api/v1/sources/rrhh/files?filter=pending")
+	_, pr := get(e.tokens["full"], "/api/v1/sources/rrhh/files?filter=problems")
+	tot := all["totals"].(map[string]any)
+	if int(tot["files_scanned"].(float64)) != len(sc["files"].([]any)) || int(tot["files_pending"].(float64)) != len(pe["files"].([]any)) {
+		t.Errorf("totales no cuadran con los filtros: %v", tot)
+	}
+	if len(sc["files"].([]any))+len(pe["files"].([]any))+len(pr["files"].([]any)) != len(all["files"].([]any)) {
+		t.Errorf("escaneados+pendientes+problemas != encontrados: %v", tot)
+	}
+	if code, _ := get(e.tokens["full"], "/api/v1/sources/rrhh/files?filter=x"); code != 400 {
+		t.Errorf("filtro inválido: %d", code)
+	}
 	if code, _ := get(e.tokens["full"], "/api/v1/sources/no-existe/files"); code != 404 {
 		t.Errorf("fuente inexistente: %d", code)
 	}
