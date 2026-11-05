@@ -13,7 +13,9 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -173,16 +175,30 @@ func runScan(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sc *persist
 
 func cmdScanStart(args []string, stdout, stderr io.Writer) int {
 	f := newFlags("scan start", stderr)
-	source := f.String("source", "", "id de la fuente autorizada")
+	source := f.String("source", "", "id de la fuente autorizada; varias separadas por coma (se escanean en orden)")
 	full := f.Bool("full", false, "reprocesar todo aunque no haya cambios")
 	cfg, code := f.load(args, stderr)
 	if cfg == nil {
 		return code
 	}
-	src := findSource(cfg, *source)
-	if src == nil || !*src.Enabled {
+	// Acepta "a,b,c", "a, b, c" y "a b c" (los argumentos sueltos tras --source).
+	names := strings.FieldsFunc(*source+" "+strings.Join(f.Args(), " "), func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(names) == 0 {
 		fmt.Fprintln(stderr, "--source debe ser una fuente configurada y habilitada")
 		return 2
+	}
+	var srcs []*config.SourceConfig
+	seen := map[string]bool{}
+	for _, n := range names {
+		src := findSource(cfg, n)
+		if src == nil || !*src.Enabled {
+			fmt.Fprintf(stderr, "--source: %q no es una fuente configurada y habilitada\n", n)
+			return 2
+		}
+		if !seen[n] {
+			seen[n] = true
+			srcs = append(srcs, src)
+		}
 	}
 	ctx, cancel := signalContext()
 	defer cancel()
@@ -200,9 +216,35 @@ func cmdScanStart(args []string, stdout, stderr io.Writer) int {
 	if *full {
 		typ = "full"
 	}
-	id, err := rt.Store.CreateScan(ctx, tenant, sources[src.ID], typ, detection.RulesVersion, version)
+	worst := 0
+	var failed []string
+	for i, src := range srcs {
+		if len(srcs) > 1 {
+			fmt.Fprintf(stdout, "== fuente %d/%d: %s ==\n", i+1, len(srcs), src.ID)
+		}
+		rc := startOne(ctx, rt, tenant, sources[src.ID], src, typ, stdout, stderr)
+		if rc == 130 {
+			return rc // Ctrl+C: no seguir con las demás
+		}
+		if rc != 0 {
+			failed = append(failed, src.ID)
+			worst = max(worst, rc)
+		}
+	}
+	if len(srcs) > 1 {
+		if len(failed) == 0 {
+			fmt.Fprintf(stdout, "listo: %d fuentes escaneadas\n", len(srcs))
+		} else {
+			fmt.Fprintf(stderr, "terminado con problemas en: %s\n", strings.Join(failed, ", "))
+		}
+	}
+	return worst
+}
+
+func startOne(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sourceID uuid.UUID, src *config.SourceConfig, typ string, stdout, stderr io.Writer) int {
+	id, err := rt.Store.CreateScan(ctx, tenant, sourceID, typ, detection.RulesVersion, version)
 	if errors.Is(err, persistence.ErrScanActive) {
-		fmt.Fprintln(stderr, "ya hay un escaneo activo para esta fuente; use scan status / scan resume")
+		fmt.Fprintf(stderr, "ya hay un escaneo activo para %s; use scan status / scan resume\n", src.ID)
 		return 1
 	}
 	if err != nil {
@@ -215,7 +257,7 @@ func cmdScanStart(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	return runScan(ctx, rt, tenant, sc, src, sources[src.ID], stdout, stderr)
+	return runScan(ctx, rt, tenant, sc, src, sourceID, stdout, stderr)
 }
 
 func scanFlags(name string, args []string, stderr io.Writer, extra func(*flags)) (*config.Config, uuid.UUID, int) {

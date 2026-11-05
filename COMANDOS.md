@@ -29,6 +29,7 @@ Todos los comandos se ejecutan desde la carpeta del proyecto (por ejemplo `~/sca
 |---|---|
 | `./arsop.sh scan start --source pruebas` | Escaneo incremental: lee solo los archivos nuevos o modificados. |
 | `./arsop.sh scan start --source pruebas --full` | Vuelve a leer todos los archivos. |
+| `./arsop.sh scan start --source carpeta1,carpeta2,carpeta3` | Escanea varias fuentes una tras otra, en ese orden (también vale con espacios: `carpeta1, carpeta2`). Si una falla, sigue con la siguiente y al final indica cuáles tuvieron problemas. Ctrl+C detiene todo. |
 | `./arsop.sh scan pause --scan <ID>` | Pausa un escaneo en curso. |
 | `./arsop.sh scan resume --scan <ID>` | Continúa un escaneo pausado o interrumpido. |
 | `./arsop.sh scan pending --scan <ID>` | Lista los archivos de 1 MB o más que quedaron pendientes. |
