@@ -135,3 +135,13 @@ nuevo que leer. Para volver a leer todo, use `--full`.
 ./arsop.sh scan process-pending --scan <ID>                    # 3. leer los archivos grandes (si hay pendientes)
 ./arsop.sh inspect --source pruebas --todos --caso REVISION    # 4. ver los RUT y correos encontrados
 ```
+
+## Acceso para un sistema externo (UpShield)
+
+| Comando | Para qué sirve |
+|---|---|
+| `./arsop.sh api-externa activar IP_DEL_SERVIDOR [NOMBRE_O_IP_PUBLICA]` | Crea una segunda API en `https://IP:8443`, con certificado de cliente y token. El token se muestra una sola vez. La API local y la interfaz no cambian. |
+| `./arsop.sh api-externa estado` | Muestra si está corriendo y sus últimos mensajes. |
+| `./arsop.sh api-externa desactivar` | La detiene y borra su certificado y token. No toca los datos escaneados. |
+
+Guía completa, firewall y entrega de credenciales: [docs/API-CLIENTE.md](docs/API-CLIENTE.md).

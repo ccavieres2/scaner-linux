@@ -152,6 +152,44 @@ func LoadFile(path string) (*Config, error) {
 // Load decodifica de forma estricta y valida. Los errores no incluyen valores
 // de secretos (la configuración no admite secretos en línea).
 func Load(r io.Reader) (*Config, error) {
+	cfg, err := decode(r)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.finish()
+}
+
+// LoadFileWithAPI carga la configuración y reemplaza su sección api: por la de
+// apiPath. Permite una segunda API (acceso externo) que comparte fuentes,
+// base de datos y claves sin duplicar el archivo principal.
+func LoadFileWithAPI(path, apiPath string) (*Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo abrir la configuración: %w", err)
+	}
+	defer f.Close()
+	cfg, err := decode(f)
+	if err != nil {
+		return nil, err
+	}
+	af, err := os.Open(apiPath)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo abrir la configuración de la API: %w", err)
+	}
+	defer af.Close()
+	dec := yaml.NewDecoder(io.LimitReader(af, MaxConfigBytes))
+	dec.KnownFields(true)
+	var o struct {
+		API APIConfig `yaml:"api"`
+	}
+	if err := dec.Decode(&o); err != nil {
+		return nil, fmt.Errorf("YAML de la API inválido o con claves desconocidas: %w", err)
+	}
+	cfg.API = o.API
+	return cfg.finish()
+}
+
+func decode(r io.Reader) (*Config, error) {
 	data, err := io.ReadAll(io.LimitReader(r, MaxConfigBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("lectura de configuración: %w", err)
@@ -172,11 +210,15 @@ func Load(r io.Reader) (*Config, error) {
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, errors.New("la configuración debe contener un único documento YAML")
 	}
-	cfg.applyDefaults()
-	if err := cfg.Validate(); err != nil {
+	return &cfg, nil
+}
+
+func (c *Config) finish() (*Config, error) {
+	c.applyDefaults()
+	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+	return c, nil
 }
 
 func boolPtr(b bool) *bool { return &b }

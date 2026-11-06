@@ -3,8 +3,8 @@
 #
 #   bash scripts/make-api-certs.sh ca      DIR
 #       Crea la CA privada que firma los certificados de cliente (una vez).
-#   bash scripts/make-api-certs.sh server  DIR IP_DE_LA_API
-#       Certificado TLS del servidor de la API (SAN = esa IP).
+#   bash scripts/make-api-certs.sh server  DIR IP_DE_LA_API [IP_O_NOMBRE...]
+#       Certificado TLS del servidor de la API (SAN = esas IP o nombres DNS).
 #   bash scripts/make-api-certs.sh client  DIR ID_CLIENTE [DIAS]
 #       Certificado de un cliente + token. Imprime la línea para
 #       api_principals.yaml (hash del token + huella del certificado + vencimiento).
@@ -35,7 +35,11 @@ server)
   [ -f ca.key ] || { echo "primero: $0 ca $dir" >&2; exit 1; }
   openssl ecparam -name prime256v1 -genkey -noout -out api.key
   openssl req -new -key api.key -subj "/CN=arsop-api" -out api.csr
-  printf 'subjectAltName=IP:%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature\nbasicConstraints=critical,CA:FALSE\n' "$ip" > api.ext
+  san=""
+  for h in "${@:3}"; do
+    if [[ "$h" =~ ^[0-9.]+$ || "$h" == *:* ]]; then san="$san,IP:$h"; else san="$san,DNS:$h"; fi
+  done
+  printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nkeyUsage=critical,digitalSignature\nbasicConstraints=critical,CA:FALSE\n' "${san#,}" > api.ext
   openssl x509 -req -in api.csr -CA ca.crt -CAkey ca.key -CAcreateserial -sha256 -days 397 -out api.crt -extfile api.ext
   rm -f api.csr api.ext
   echo "Servidor: $dir/api.crt y $dir/api.key (api.tls.cert_file / key_file)"

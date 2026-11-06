@@ -22,9 +22,16 @@ import (
 
 func main() {
 	file := flag.String("file", "/etc/arsop/scanner.yaml", "ruta del archivo de configuración YAML")
+	apiFile := flag.String("api-file", "", "reemplaza la sección api: (segunda API para acceso externo)")
 	flag.Parse()
 	log := app.NewLogger(os.Stderr)
-	cfg, err := config.LoadFile(*file)
+	var cfg *config.Config
+	var err error
+	if *apiFile != "" {
+		cfg, err = config.LoadFileWithAPI(*file, *apiFile)
+	} else {
+		cfg, err = config.LoadFile(*file)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

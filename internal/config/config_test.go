@@ -145,3 +145,34 @@ func TestRejectsMultiDocumentAndEmptyAndOversize(t *testing.T) {
 		t.Fatalf("archivo excesivo debe fallar: %v", err)
 	}
 }
+
+func TestLoadFileWithAPIReplacesOnlyAPI(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "s.yaml")
+	if err := os.WriteFile(main, []byte(loadExample(t)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	over := func(body string) string {
+		p := filepath.Join(dir, "api.yaml")
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	ok := "api:\n  bind: 10.0.0.5\n  port: 8443\n  auth: {mode: mtls_token, principals_file: /e/p.yaml}\n" +
+		"  tls: {cert_file: /e/a.crt, key_file: /e/a.key, client_ca_file: /e/c.crt}\n"
+	cfg, err := LoadFileWithAPI(main, over(ok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.API.Port != 8443 || len(cfg.Sources) == 0 || cfg.API.MaxPageSize == 0 {
+		t.Errorf("sobreescritura incorrecta: %+v", cfg.API)
+	}
+	// Las reglas de seguridad siguen aplicando a la segunda API.
+	if _, err := LoadFileWithAPI(main, over("api:\n  bind: 10.0.0.5\n  port: 8443\n  auth: {principals_file: /e/p.yaml}\n")); err == nil {
+		t.Error("IP privada sin TLS ni mTLS debe rechazarse")
+	}
+	if _, err := LoadFileWithAPI(main, over(strings.Replace(ok, "10.0.0.5", "8.8.8.8", 1))); err == nil {
+		t.Error("IP pública debe rechazarse")
+	}
+}

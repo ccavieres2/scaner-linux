@@ -93,10 +93,28 @@ Endpoints: `POST /api/v1/identifiers/search`, `GET /api/v1/files/{id}`, `GET /ap
 
 ## Docker
 
-Con Docker Compose, la API publica su puerto en `api.bind` del host. `allowed_cidrs` evalúa la IP que ve el
-contenedor, y con el proxy de Docker esa IP puede ser la del gateway en vez de la del cliente. Por eso, en Docker,
-la restricción por IP se hace en el **firewall del host** (paso 3); mTLS y el token funcionan igual. Monte
-`/etc/arsop/tls` en solo lectura en el servicio `api`.
+Con Docker no siga los pasos de arriba. Un solo comando crea una segunda API, `api-externa`, y deja igual la API
+local y la interfaz web:
+
+```bash
+./arsop.sh api-externa activar IP_PRIVADA_DEL_SERVIDOR [NOMBRE_O_IP_PUBLICA]
+./arsop.sh api-externa estado
+```
+
+Queda en `https://IP:8443` y genera en `secrets/api-externa/` la CA, los certificados y un token ligado al
+certificado de `upshield`, con vencimiento de 365 días. Puede ver rutas (`files:names`).
+
+- `IP_PRIVADA_DEL_SERVIDOR` debe ser privada: la configuración rechaza publicar en una IP pública. Para llegar desde
+  otra red use una VPN o una redirección del puerto 8443 hacia esa IP.
+- Si UpShield entra por otro nombre o IP, indíquelo como segundo argumento: el certificado debe incluirlo.
+- `allowed_cidrs` no sirve en Docker: el proxy puede ocultar la IP real del cliente. **ufw tampoco filtra los puertos
+  publicados por Docker.** Restrinja el acceso en la cadena `DOCKER-USER`:
+
+```bash
+sudo iptables -I DOCKER-USER -p tcp --dport 8443 ! -s IP_DE_UPSHIELD -j DROP
+```
+
+Esa regla no sobrevive a un reinicio salvo que la guarde (por ejemplo con `netfilter-persistent save`).
 
 ## Lo que todavía falta para producción
 

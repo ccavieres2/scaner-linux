@@ -83,6 +83,25 @@ services:
     mem_limit: 512m
     cpus: 1.0
 
+  # Segunda API, solo para el sistema externo (./arsop.sh api-externa): exige HTTPS,
+  # certificado de cliente y token. La API local de arriba y la interfaz no cambian.
+  api-externa:
+    <<: *hardening
+    image: arsop-api:local
+    profiles: [externa]
+    restart: unless-stopped
+    command: ["--api-file", "/etc/arsop-externa/api.yaml"]
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    volumes:
+      - ./local:/etc/arsop:ro
+      - ./secrets/api-externa/servicio:/etc/arsop-externa:ro
+      - {type: volume, source: secrets, target: /run/secrets, read_only: true, volume: {subpath: api}}
+    networks: [backend, frontend]
+    ports:
+      - "${ARSOP_EXT_BIND:-127.0.0.1}:8443:8443"
+    mem_limit: 512m
+    cpus: 1.0
+
   # Comandos del escáner:  ./arsop.sh scan start --source ejemplo
   scanner:
     <<: [*hardening, *scanner-image]
