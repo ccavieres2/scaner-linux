@@ -1,6 +1,6 @@
 # Imagen de la API: binario estático sobre distroless no-root. No ve archivos de origen.
 # TODO Fase 4: fijar imágenes base por digest (@sha256:...) en CI.
-FROM golang:1.26.10-bookworm AS build
+FROM golang:1.26.11-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

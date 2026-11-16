@@ -19,7 +19,7 @@ set -euo pipefail
 
 REPO_URL="${1:-https://github.com/ccavieres2/scaner-linux-sin-intefaz.git}"
 BRANCH="${2:-main}"
-GO_VERSION="1.26.10"
+GO_VERSION="1.26.11"
 PG_VERSION="16.4.0"
 A="${ARSOP_HOME:-$HOME/arsop}"
 PG_PORT="${ARSOP_PG_PORT:-55432}"

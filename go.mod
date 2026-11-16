@@ -2,7 +2,7 @@ module arsop-scanner
 
 go 1.26.4
 
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/fergusstrange/embedded-postgres v1.29.0

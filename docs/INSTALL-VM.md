@@ -23,7 +23,7 @@ bash ~/arsop-src/scripts/install-vm.sh
 ```
 
 El script:
-- instala Go 1.26.10, PostgreSQL y el entorno Python;
+- instala Go 1.26.11, PostgreSQL y el entorno Python;
 - clona el repositorio en `/opt/arsop/src` y compila;
 - genera secretos aleatorios con permisos 0600 en `/etc/arsop/secrets` y crea la configuración `/etc/arsop/scanner.yaml`;
 - copia los datos ficticios de ejemplo en `/data/input/ejemplo`;

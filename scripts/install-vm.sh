@@ -14,7 +14,7 @@ set -euo pipefail
 
 REPO_URL="${1:-}"
 BRANCH="${2:-main}"
-GO_VERSION="1.26.10"
+GO_VERSION="1.26.11"
 SRC_DIR="${ARSOP_SRC_DIR:-/opt/arsop/src}"
 VENV=/opt/arsop/venv
 ETC=/etc/arsop

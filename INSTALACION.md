@@ -41,7 +41,7 @@ El script hace lo siguiente:
 
 | Paso | Resultado |
 |---|---|
-| Instala Go 1.26.10, PostgreSQL 16, Python y sus librerías | dependencias listas |
+| Instala Go 1.26.11, PostgreSQL 16, Python y sus librerías | dependencias listas |
 | Clona el repositorio en `/opt/arsop/src` y compila | `/usr/local/bin/arsop-scanner` y `arsop-api` |
 | Crea el usuario de servicio `arsop` | el escáner no corre como root |
 | Genera claves aleatorias con permisos 0600 | `/etc/arsop/secrets/` |
