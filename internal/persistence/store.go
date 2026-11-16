@@ -157,6 +157,17 @@ func (s *Store) CreateScan(ctx context.Context, tenant, source uuid.UUID, typ, r
 	return id, err
 }
 
+// ActiveScan devuelve el escaneo en curso o pausado de la fuente, si hay uno.
+func (s *Store) ActiveScan(ctx context.Context, tenant, source uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := s.pool.QueryRow(ctx, `SELECT id FROM scans WHERE tenant_id = $1 AND source_id = $2
+		AND status IN ('running','paused') ORDER BY started_at DESC LIMIT 1`, tenant, source).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, ErrNotFound
+	}
+	return id, err
+}
+
 func (s *Store) GetScan(ctx context.Context, tenant, id uuid.UUID) (*Scan, error) {
 	var sc Scan
 	err := s.pool.QueryRow(ctx, `SELECT s.id, s.tenant_id, s.source_id, src.logical_name, s.type, s.status, s.started_at,

@@ -53,6 +53,9 @@ Docs de usuario: `COMANDOS.md` (referencia de comandos: actualizarla al agregar 
 - Escaneo incremental: se salta un archivo si coinciden tamaño + mtime + identidad + versión de reglas.
   Los archivos grandes quedan `deferred` hasta `scan process-pending`.
 - `scan start` acepta `--source a,b,c` (en orden) o `--all` (todas las habilitadas).
+- Interrupciones: SIGINT/SIGTERM/SIGHUP pausan el escaneo en orden; `scan start` sobre una fuente con escaneo
+  pausado o `running` huérfano lo retoma (las tareas a medias vuelven al vencer su lease).
+  `./arsop.sh fondo ...` usa `setsid nohup` (en Git Bash no hay `setsid` ni symlinks reales).
 - La barra de progreso solo se dibuja si stderr es TTY; sin TTY (cron) salen logs normales.
 - Commits en español; push a `main` tras cada cambio (remoto: github.com/ccavieres2/scaner-linux).
 

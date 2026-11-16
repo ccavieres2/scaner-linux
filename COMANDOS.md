@@ -32,7 +32,12 @@ Todos los comandos se ejecutan desde la carpeta del proyecto (por ejemplo `~/sca
 | `./arsop.sh scan start --source carpeta1,carpeta2,carpeta3` | Escanea varias fuentes una tras otra, en ese orden (también vale con espacios: `carpeta1, carpeta2`). Si una falla, sigue con la siguiente y al final indica cuáles tuvieron problemas. Ctrl+C detiene todo. |
 | `./arsop.sh scan start --all` | Escanea todas las carpetas habilitadas del `.yaml`, una tras otra: lee solo lo nuevo o modificado. Con `--full` vuelve a leer todo. |
 | `./arsop.sh scan pause --scan <ID>` | Pausa un escaneo en curso. |
-| `./arsop.sh scan resume --scan <ID>` | Continúa un escaneo pausado o interrumpido. |
+| `./arsop.sh scan resume --scan <ID>` | Continúa un escaneo pausado o interrumpido. Normalmente no hace falta: repetir el mismo `scan start` lo retoma solo. |
+| `./arsop.sh fondo scan start --all` | Lanza el escaneo en segundo plano: se puede cerrar la terminal o la sesión SSH. Guarda el registro en `registros/`. |
+| `./arsop.sh fondo-ver` | Muestra el avance del último escaneo en segundo plano (Ctrl+C solo deja de mirar). |
+
+**Si se corta un escaneo** (Ctrl+C, terminal cerrada, se cayó el SSH, corte de luz): ejecute **el mismo comando** otra
+vez. El escáner encuentra el escaneo que quedó a medias y sigue donde iba; lo ya leído no se repite.
 | `./arsop.sh scan pending --scan <ID>` | Lista los archivos de 1 MB o más que quedaron pendientes. |
 | `./arsop.sh scan process-pending --scan <ID>` | Lee los archivos pendientes. |
 

@@ -11,6 +11,8 @@
 #                                       RUT/correos detectados en un archivo y dónde
 #   ./arsop.sh interfaz                 cómo abrir la interfaz web (en este equipo o desde otro PC)
 #   ./arsop.sh estado | detener | iniciar | logs
+#   ./arsop.sh fondo scan start --all   igual, pero en segundo plano: se puede cerrar la terminal
+#   ./arsop.sh fondo-ver                sigue el avance del escaneo en segundo plano
 #   ./arsop.sh token-nuevo              reemplaza el token de la API
 #   ./arsop.sh api-externa activar IP [NOMBRE_O_IP_PUBLICA]   acceso para un sistema externo (UpShield)
 #   ./arsop.sh api-externa estado | desactivar
@@ -109,6 +111,23 @@ EOF2
     rm -rf "$EXT" ;;
   *) echo "uso: ./arsop.sh api-externa activar IP [NOMBRE_O_IP_PUBLICA] | estado | desactivar" >&2; exit 2 ;;
   esac ;;
+fondo)
+  shift
+  [ $# -gt 0 ] || { echo "uso: ./arsop.sh fondo scan start --all" >&2; exit 2; }
+  mkdir -p registros
+  log="registros/escaneo-$(date +%Y%m%d-%H%M%S).log"
+  # setsid + nohup: el proceso queda fuera de la terminal y no recibe su cierre.
+  sep=""; command -v setsid >/dev/null && sep=setsid
+  $sep nohup "$0" "$@" </dev/null >"$log" 2>&1 &
+  ln -sf "$(basename "$log")" registros/ultimo.log
+  echo "Escaneo en segundo plano (puede cerrar la terminal)."
+  echo "  Avance:      ./arsop.sh fondo-ver   (o la interfaz web)"
+  echo "  Registro:    $log"
+  echo "  Si se corta: repita el mismo comando y sigue donde quedó." ;;
+fondo-ver)
+  [ -e registros/ultimo.log ] || { echo "No hay escaneos en segundo plano." >&2; exit 1; }
+  echo "(Ctrl+C solo deja de mirar; el escaneo sigue)"
+  tail -n 20 -f registros/ultimo.log ;;
 token-nuevo) dc run --rm setup nuevo-token && dc restart api ;;
 estado)      dc ps -a ;;
 detener)     dc stop ;;
@@ -148,7 +167,7 @@ archivos)
     LEFT JOIN findings fi ON fi.file_version_id = v.id
     WHERE f.active AND ('$f' = '' OR s.logical_name = '$f')
     GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2;" ;;
-ayuda|-h|--help) sed -n '2,17p' "$0" ;;
+ayuda|-h|--help) sed -n '2,19p' "$0" ;;
 *)
   out=$(fuentes) || exit 1
   m=(); [ -z "$out" ] || mapfile -t m <<<"$out"

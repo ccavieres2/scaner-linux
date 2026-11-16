@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -29,7 +30,9 @@ import (
 )
 
 func signalContext() (context.Context, context.CancelFunc) {
-	return signal.NotifyContext(context.Background(), os.Interrupt)
+	// Ctrl+C, cierre de la terminal o de la sesión SSH (SIGHUP) y docker stop
+	// (SIGTERM): en todos los casos el escaneo se pausa en orden.
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 }
 
 func openRuntime(ctx context.Context, cfg *config.Config, stderr io.Writer) (*app.Runtime, int) {
@@ -163,7 +166,12 @@ func runScan(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sc *persist
 		fmt.Fprintf(stderr, "escaneo %s: raíz no disponible (no se borró ningún resultado previo)\n", sc.ID)
 		return 1
 	case errors.Is(err, context.Canceled):
-		fmt.Fprintf(stderr, "interrumpido; reanudar con: scanner scan resume --scan %s\n", sc.ID)
+		// Se marca como pausado con un contexto nuevo (el original ya se canceló).
+		// Lo leído ya está guardado; al repetir el mismo scan start se retoma solo.
+		pctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		_ = rt.Store.SetScanStatus(pctx, tenant, sc.ID, []string{"running"}, "paused")
+		cancel()
+		fmt.Fprintf(stderr, "interrumpido: escaneo %s pausado. Para seguir, repita el mismo comando (scan start) o use: scan resume --scan %s\n", sc.ID, sc.ID)
 		return 130
 	case err != nil:
 		fmt.Fprintln(stderr, "error:", err)
@@ -268,14 +276,24 @@ func cmdScanStart(args []string, stdout, stderr io.Writer) int {
 func startOne(ctx context.Context, rt *app.Runtime, tenant uuid.UUID, sourceID uuid.UUID, src *config.SourceConfig, typ string, stdout, stderr io.Writer) int {
 	id, err := rt.Store.CreateScan(ctx, tenant, sourceID, typ, detection.RulesVersion, version)
 	if errors.Is(err, persistence.ErrScanActive) {
-		fmt.Fprintf(stderr, "ya hay un escaneo activo para %s; use scan status / scan resume\n", src.ID)
-		return 1
-	}
-	if err != nil {
+		// Quedó uno pausado o cortado (terminal cerrada, corte de luz): se retoma
+		// donde iba en vez de fallar. Las tareas a medias se recuperan al vencer su lease.
+		prev, aerr := rt.Store.ActiveScan(ctx, tenant, sourceID)
+		if aerr == nil {
+			aerr = rt.Store.SetScanStatus(ctx, tenant, prev, []string{"paused", "running"}, "running")
+		}
+		if aerr != nil {
+			fmt.Fprintf(stderr, "ya hay un escaneo activo para %s; use scan status / scan resume\n", src.ID)
+			return 1
+		}
+		fmt.Fprintf(stdout, "retomando escaneo %s de %s donde quedó\n", prev, src.ID)
+		id = prev
+	} else if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	} else {
+		fmt.Fprintf(stdout, "escaneo %s iniciado (%s)\n", id, typ)
 	}
-	fmt.Fprintf(stdout, "escaneo %s iniciado (%s)\n", id, typ)
 	sc, err := rt.Store.GetScan(ctx, tenant, id)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
