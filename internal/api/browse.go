@@ -47,7 +47,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
-	sources, err := s.store.SourceSummaries(r.Context(), s.tenant)
+	sources, err := s.store.SourceSummaries(r.Context(), s.tenant, "")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
@@ -109,7 +109,7 @@ func (s *Server) sourceFiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	sums, err := s.store.SourceSummaries(r.Context(), s.tenant)
+	sums, err := s.store.SourceSummaries(r.Context(), s.tenant, name)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return

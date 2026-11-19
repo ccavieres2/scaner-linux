@@ -35,12 +35,11 @@ func (s *Store) ListScans(ctx context.Context, tenant uuid.UUID, limit int) ([]S
 	})
 }
 
-// pendingSQL: el archivo espera lectura por tamaño (scan process-pending).
-const pendingSQL = `EXISTS (SELECT 1 FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
-	WHERE v.file_id = f.id AND t.state = 'deferred')`
-
-// scannedSQL: el archivo fue leído (entero o en parte) y no espera otra lectura.
-const scannedSQL = `f.state IN ('completed','partial') AND NOT ` + pendingSQL
+// pendingSet: archivos que esperan lectura por tamaño (scan process-pending).
+// No depende de la fila: PostgreSQL lo calcula una vez (índice parcial
+// file_tasks_deferred) en vez de una subconsulta por archivo.
+const pendingSet = `(SELECT v.file_id FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
+	WHERE t.state = 'deferred')`
 
 type SourceSummary struct {
 	Name         string     `json:"source"`
@@ -55,20 +54,28 @@ type SourceSummary struct {
 	LastScanAt   *time.Time `json:"last_completed_at"`
 }
 
-func (s *Store) SourceSummaries(ctx context.Context, tenant uuid.UUID) ([]SourceSummary, error) {
-	rows, err := s.pool.Query(ctx, `SELECT src.logical_name, src.enabled,
+// SourceSummaries resume cada fuente (o solo una, si source no está vacío) en
+// una sola pasada sobre los archivos: con millones de archivos, una subconsulta
+// por archivo superaba el tiempo máximo de respuesta de la API.
+func (s *Store) SourceSummaries(ctx context.Context, tenant uuid.UUID, source string) ([]SourceSummary, error) {
+	rows, err := s.pool.Query(ctx, `WITH pend AS (SELECT DISTINCT file_id FROM `+pendingSet+` x),
+		hit AS (SELECT DISTINCT file_version_id FROM findings
+			WHERE tenant_id = $1 AND status <> 'rejected_by_reviewer')
+		SELECT src.logical_name, src.enabled,
 			count(f.id),
-			count(f.id) FILTER (WHERE `+scannedSQL+`),
-			count(f.id) FILTER (WHERE `+pendingSQL+`),
-			count(f.id) FILTER (WHERE EXISTS (SELECT 1 FROM findings fi
-				WHERE fi.file_version_id = f.last_success_version AND fi.status <> 'rejected_by_reviewer')),
+			count(f.id) FILTER (WHERE f.state IN ('completed','partial') AND p.file_id IS NULL),
+			count(p.file_id),
+			count(h.file_version_id),
 			count(f.id) FILTER (WHERE f.state = 'partial'),
 			count(f.id) FILTER (WHERE f.state = 'failed'),
 			count(f.id) FILTER (WHERE f.state = 'skipped'),
 			(SELECT max(sc.completed_at) FROM scans sc WHERE sc.source_id = src.id AND sc.status IN ('completed','partial'))
-		FROM sources src LEFT JOIN files f ON f.source_id = src.id AND f.active
-		WHERE src.tenant_id = $1
-		GROUP BY src.id ORDER BY src.logical_name`, tenant)
+		FROM sources src
+		LEFT JOIN files f ON f.source_id = src.id AND f.active
+		LEFT JOIN pend p ON p.file_id = f.id
+		LEFT JOIN hit h ON h.file_version_id = f.last_success_version
+		WHERE src.tenant_id = $1 AND ($2 = '' OR src.logical_name = $2)
+		GROUP BY src.id ORDER BY src.logical_name`, tenant, source)
 	if err != nil {
 		return nil, err
 	}
@@ -108,29 +115,35 @@ func (s *Store) ListSourceFiles(ctx context.Context, tenant uuid.UUID, source, f
 	if err != nil {
 		return nil, "", false, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT f.id, f.relative_path, f.size_bytes, f.mime_type, f.state,
+	// Primero se elige la página (recorriendo el índice por ruta y parando al
+	// completarla) y recién después se cuentan hallazgos de esos archivos.
+	rows, err := s.pool.Query(ctx, `WITH page AS (
+			SELECT f.id, f.relative_path, f.size_bytes, f.mime_type, f.state, f.skip_reason, f.last_success_version
+			FROM files f
+			WHERE f.tenant_id = $1 AND f.source_id = $2 AND f.active AND CASE $3::text
+				WHEN 'findings' THEN EXISTS (SELECT 1 FROM findings fi
+					WHERE fi.file_version_id = f.last_success_version AND fi.status <> 'rejected_by_reviewer')
+				WHEN 'scanned' THEN f.state IN ('completed','partial') AND f.id NOT IN `+pendingSet+`
+				WHEN 'pending' THEN f.id IN `+pendingSet+`
+				WHEN 'problems' THEN f.state IN ('failed','skipped')
+				ELSE true END
+			ORDER BY f.relative_path OFFSET $4 LIMIT $5)
+		SELECT p.id, p.relative_path, p.size_bytes, p.mime_type, p.state,
 			count(fd.id) FILTER (WHERE i.type = 'rut'),
 			count(fd.id) FILTER (WHERE i.type = 'email'),
 			COALESCE(bool_or(fd.detection_method = 'ocr'), false),
-			`+pendingSQL+`,
-			COALESCE(CASE f.state
-				WHEN 'skipped' THEN f.skip_reason
+			p.id IN `+pendingSet+`,
+			COALESCE(CASE p.state
+				WHEN 'skipped' THEN p.skip_reason
 				WHEN 'failed' THEN (SELECT t.last_error_code FROM file_tasks t JOIN file_versions v ON v.id = t.file_version_id
-				                    WHERE v.file_id = f.id AND t.last_error_code IS NOT NULL
+				                    WHERE v.file_id = p.id AND t.last_error_code IS NOT NULL
 				                    ORDER BY v.observed_at DESC LIMIT 1)
 			END, '')
-		FROM files f
-		LEFT JOIN findings fd ON fd.file_version_id = f.last_success_version AND fd.status <> 'rejected_by_reviewer'
+		FROM page p
+		LEFT JOIN findings fd ON fd.file_version_id = p.last_success_version AND fd.status <> 'rejected_by_reviewer'
 		LEFT JOIN identifiers i ON i.id = fd.identifier_id
-		WHERE f.tenant_id = $1 AND f.source_id = $2 AND f.active
-		GROUP BY f.id
-		HAVING CASE $3::text
-			WHEN 'findings' THEN count(fd.id) > 0
-			WHEN 'scanned' THEN `+scannedSQL+`
-			WHEN 'pending' THEN `+pendingSQL+`
-			WHEN 'problems' THEN f.state IN ('failed','skipped')
-			ELSE true END
-		ORDER BY f.relative_path OFFSET $4 LIMIT $5`, tenant, sid, filter, offset, limit)
+		GROUP BY p.id, p.relative_path, p.size_bytes, p.mime_type, p.state, p.skip_reason
+		ORDER BY p.relative_path`, tenant, sid, filter, offset, limit)
 	if err != nil {
 		return nil, root, true, err
 	}
